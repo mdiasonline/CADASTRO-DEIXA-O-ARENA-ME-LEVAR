@@ -1,0 +1,98 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folia Register - Deixa o Arena Me Levar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Montserrat:wght@400;600;800&family=Oswald:wght@700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --arena-blue: #2B4C7E;
+        --arena-red: #C63D2F;
+        --arena-yellow: #F9B115;
+        --arena-cream: #FDF5E6;
+      }
+      body {
+        font-family: 'Montserrat', sans-serif;
+        background-color: var(--arena-cream);
+      }
+      .font-festive {
+        font-family: 'Bangers', system-ui;
+      }
+      .font-arena {
+        font-family: 'Oswald', sans-serif;
+        text-transform: uppercase;
+      }
+      /* Arena Striped Background */
+      .bg-arena-stripes {
+        background: repeating-linear-gradient(
+          90deg,
+          #2B4C7E,
+          #2B4C7E 40px,
+          #F9B115 40px,
+          #F9B115 80px
+        );
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        opacity: 0.15;
+      }
+      .confetti-overlay {
+        background-image: url("https://www.transparenttextures.com/patterns/confetti.png");
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        opacity: 0.4;
+      }
+      .bg-arena-blue { background-color: var(--arena-blue); }
+      .text-arena-blue { color: var(--arena-blue); }
+      .bg-arena-red { background-color: var(--arena-red); }
+      .text-arena-red { color: var(--arena-red); }
+      .bg-arena-yellow { background-color: var(--arena-yellow); }
+      .text-arena-yellow { color: var(--arena-yellow); }
+      
+      .arena-card {
+        background-color: white;
+        border: 4px solid var(--arena-blue);
+        border-radius: 2rem;
+        box-shadow: 8px 8px 0px var(--arena-red);
+      }
+      
+      .btn-arena {
+        background-color: var(--arena-red);
+        color: white;
+        border: 2px solid var(--arena-blue);
+        box-shadow: 4px 4px 0px var(--arena-blue);
+        transition: all 0.2s;
+      }
+      .btn-arena:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0px var(--arena-blue);
+      }
+      .btn-arena:active {
+        transform: translate(2px, 2px);
+        box-shadow: 0px 0px 0px var(--arena-blue);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+  }
+}
+</script>
+</head>
+  <body class="min-h-screen">
+    <div class="bg-arena-stripes"></div>
+    <div class="confetti-overlay"></div>
+    <div id="root"></div>
+  </body>
+</html>
