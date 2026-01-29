@@ -1,6 +1,8 @@
 
 {
   "version": 2,
+  "buildCommand": "echo 'Skipping build'",
+  "installCommand": "echo 'Skipping install'",
   "outputDirectory": ".",
   "cleanUrls": true,
   "rewrites": [
