@@ -59,8 +59,8 @@ let supabaseInstance: SupabaseClient | null = null;
  * Retorna o provedor de dados adequado (Supabase ou Local)
  */
 const getProvider = (): DBProvider => {
-  const url = getEnv('VITE_SUPABASE_URL');
-  const key = getEnv('VITE_SUPABASE_ANON_KEY');
+  const url = getEnv('SUPABASE_URL');
+  const key = getEnv('SUPABASE_ANON_KEY');
 
   if (!url || !key) {
     return localProvider;
