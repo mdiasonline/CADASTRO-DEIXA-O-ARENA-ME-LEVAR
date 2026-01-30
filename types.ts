@@ -3,9 +3,10 @@ export interface Member {
   id: string;
   nome: string;
   bloco: string;
+  tipo: string;
   apto: string;
   celular: string;
-  slogan?: string;
+  photo?: string; // Base64 string of the selfie
   createdAt: number;
 }
 
