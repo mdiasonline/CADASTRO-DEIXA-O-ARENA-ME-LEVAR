@@ -227,7 +227,7 @@ const App: React.FC = () => {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
-                    {['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'CONVIDADO'].map(b => <option key={b} value={b}>{b}</option>)}
+                    {['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8','CONVIDADO'].map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                   <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
                     {cargos.map(c => <option key={c} value={c}>{c}</option>)}
