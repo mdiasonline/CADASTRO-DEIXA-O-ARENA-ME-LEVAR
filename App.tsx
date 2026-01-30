@@ -16,7 +16,9 @@ import {
   Filter,
   CloudDownload,
   DatabaseZap,
-  HardDrive
+  HardDrive,
+  Lock,
+  X
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -29,14 +31,21 @@ const App: React.FC = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
   
-  const [formData, setFormData] = useState({
+  // Estados para exclusão protegida
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
+  
+  const defaultFormData = {
     nome: '',
     bloco: '',
     tipo: '',
     apto: '',
     celular: '',
     photo: '' as string | undefined
-  });
+  };
+
+  const [formData, setFormData] = useState(defaultFormData);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,17 +114,31 @@ const App: React.FC = () => {
       alert(`ERRO SUPABASE: ${msg} (Código: ${code}). Verifique se a tabela 'membros' existe e o RLS está desativado.`);
     } finally {
       setLoading(false);
-      setFormData({ nome: '', bloco: 'BLOCO 1', tipo: 'FOLIÃO', apto: '', celular: '', photo: undefined });
+      setFormData(defaultFormData);
     }
   };
 
-  const removeMember = async (id: string) => {
-    if (!window.confirm('Deseja excluir este registro?')) return;
-    try {
-      await databaseService.deleteMember(id);
-      setMembers(prev => prev.filter(m => m.id !== id));
-    } catch (error: any) {
-      alert(`Erro ao excluir: ${error.message}`);
+  const initiateRemoveMember = (id: string) => {
+    setMemberIdToDelete(id);
+    setPasswordInput('');
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (passwordInput.toUpperCase() === 'GARRINCHA') {
+      if (!memberIdToDelete) return;
+      try {
+        await databaseService.deleteMember(memberIdToDelete);
+        setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
+        setIsDeleteModalOpen(false);
+        setMemberIdToDelete(null);
+        setPasswordInput('');
+      } catch (error: any) {
+        alert(`Erro ao excluir: ${error.message}`);
+      }
+    } else {
+      alert('SENHA INCORRETA! ACESSO NEGADO.');
+      setPasswordInput('');
     }
   };
 
@@ -129,6 +152,7 @@ const App: React.FC = () => {
 
   const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all";
   const cargos = ['FOLIÃO', 'BATERIA', 'DIRETORIA', 'RAINHA', 'DESTAQUE'];
+  const blocosDisponiveis = ['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8','CONVIDADO'];
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -227,7 +251,7 @@ const App: React.FC = () => {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
-                    {['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8','CONVIDADO'].map(b => <option key={b} value={b}>{b}</option>)}
+                    {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                   <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
                     {cargos.map(c => <option key={c} value={c}>{c}</option>)}
@@ -305,7 +329,7 @@ const App: React.FC = () => {
                         
                         <div className="flex items-center justify-end gap-2 md:col-start-3">
                           <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
-                          <button onClick={() => removeMember(m.id)} className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
+                          <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
                         </div>
                       </div>
                     </div>
@@ -316,6 +340,44 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Modal de Senha para Exclusão */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="arena-card w-full max-w-sm bg-white overflow-hidden animate-slideUp">
+            <div className="bg-[#C63D2F] p-4 flex justify-between items-center text-white">
+              <h3 className="font-arena text-xl flex items-center gap-2"><Lock size={20} /> ACESSO RESTRITO</h3>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="hover:rotate-90 transition-transform"><X /></button>
+            </div>
+            <div className="p-8 space-y-4">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Informe a senha de administrador para excluir este folião:</p>
+              <input 
+                type="password" 
+                value={passwordInput} 
+                onChange={(e) => setPasswordInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmDelete()}
+                autoFocus
+                className={`${inputStyles} text-center tracking-widest`}
+                placeholder="SENHA"
+              />
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setIsDeleteModalOpen(false)} 
+                  className="flex-grow py-3 rounded-xl border-2 border-gray-200 font-bold text-gray-400 hover:bg-gray-50 transition-colors uppercase text-xs"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmDelete} 
+                  className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg"
+                >
+                  CONFIRMAR
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="py-6 text-center text-[#2B4C7E]/40 text-[10px] font-black uppercase tracking-widest mt-auto">
         Desenvolvido por Maycon Dias
