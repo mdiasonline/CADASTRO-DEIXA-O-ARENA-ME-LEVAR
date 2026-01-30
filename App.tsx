@@ -32,8 +32,8 @@ const App: React.FC = () => {
   
   const [formData, setFormData] = useState({
     nome: '',
-    bloco: 'BLOCO 1',
-    tipo: 'FOLIÃO',
+    bloco: '',
+    tipo: '',
     apto: '',
     celular: '',
     photo: '' as string | undefined
@@ -140,7 +140,6 @@ const App: React.FC = () => {
               CADASTRO <span className="text-[#F9B115]">DA FOLIA</span>
             </h1>
             
-            {/* Status de Sincronização agora embaixo do título */}
             <div className="mt-3 flex items-center gap-2 px-4 py-1.5 bg-black/20 rounded-full border border-white/10 w-fit animate-fadeIn">
               {syncStatus === 'synced' && (
                 <>
@@ -292,10 +291,22 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4">
-                        <div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase">Apto</span><span className="font-bold text-[#2B4C7E] text-sm">{m.apto || '-'}</span></div>
-                        <div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase">WhatsApp</span><span className="font-bold text-[#2B4C7E] text-xs">{m.celular}</span></div>
-                        <div className="flex items-center justify-end gap-2">
+                      
+                      <div className="flex flex-row items-center justify-between md:grid md:grid-cols-3 gap-4 w-full border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4">
+                        {/* Wrapper para Apto e WhatsApp ficarem próximos no mobile e no grid no desktop */}
+                        <div className="flex flex-row gap-6 md:contents">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-gray-400 uppercase">Apto</span>
+                            <span className="font-bold text-[#2B4C7E] text-sm">{m.apto || '-'}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-gray-400 uppercase">WhatsApp</span>
+                            <span className="font-bold text-[#2B4C7E] text-xs">{m.celular}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Botões sempre alinhados à direita ou na 3a coluna */}
+                        <div className="flex items-center justify-end gap-2 md:col-start-3">
                           <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
                           <button onClick={() => removeMember(m.id)} className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
                         </div>
