@@ -134,16 +134,33 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4 relative">
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 px-3 py-1 bg-black/30 rounded-full border border-white/20">
-            {syncStatus === 'synced' && <><DatabaseZap size={14} className="text-green-400" /><span className="text-[9px] font-black">CLOUD ONLINE</span></>}
-            {syncStatus === 'syncing' && <><CloudDownload size={14} className="text-yellow-400 animate-pulse" /><span className="text-[9px] font-black">SINCRONIZANDO</span></>}
-            {syncStatus === 'local' && <><HardDrive size={14} className="text-orange-400" /><span className="text-[9px] font-black">MODO LOCAL (OFFLINE)</span></>}
-          </div>
-          <div className="text-center">
+        <div className="container mx-auto px-4">
+          <div className="text-center flex flex-col items-center">
             <h1 className="text-3xl md:text-5xl font-arena tracking-tighter">
-              CADASTRO <span className="text-[#F9B115]">DA ALEGRIA</span>
+              CADASTRO <span className="text-[#F9B115]">DA FOLIA</span>
             </h1>
+            
+            {/* Status de Sincronização agora embaixo do título */}
+            <div className="mt-3 flex items-center gap-2 px-4 py-1.5 bg-black/20 rounded-full border border-white/10 w-fit animate-fadeIn">
+              {syncStatus === 'synced' && (
+                <>
+                  <DatabaseZap size={14} className="text-green-400" />
+                  <span className="text-[10px] font-black tracking-widest uppercase">Cloud Online</span>
+                </>
+              )}
+              {syncStatus === 'syncing' && (
+                <>
+                  <CloudDownload size={14} className="text-yellow-400 animate-pulse" />
+                  <span className="text-[10px] font-black tracking-widest uppercase">Sincronizando</span>
+                </>
+              )}
+              {syncStatus === 'local' && (
+                <>
+                  <HardDrive size={14} className="text-orange-400" />
+                  <span className="text-[10px] font-black tracking-widest uppercase">Modo Local (Offline)</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
