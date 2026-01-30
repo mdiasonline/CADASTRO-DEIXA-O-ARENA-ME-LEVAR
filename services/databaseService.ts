@@ -2,114 +2,108 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Member } from "../types";
 
-// Instância singleton para o cliente do Supabase
-let supabaseInstance: SupabaseClient | null = null;
+// Interface para garantir que ambos os drivers (Supabase e Local) funcionem igual
+interface DBProvider {
+  getMembers(): Promise<Member[]>;
+  addMember(member: Member): Promise<void>;
+  deleteMember(id: string): Promise<void>;
+  isLocal: boolean;
+}
 
 /**
- * Tenta obter uma variável de ambiente de forma segura no navegador/Vite
+ * Driver de Fallback: LocalStorage
+ * Usado quando as chaves do Supabase não estão configuradas.
  */
-const getEnvVar = (key: string): string => {
-  try {
-    // 1. Tenta via import.meta.env (Padrão do Vite)
-    // @ts-ignore
-    const viteVar = import.meta.env?.[`VITE_${key}`] || import.meta.env?.[key];
-    if (viteVar) return viteVar;
-
-    // 2. Tenta via process.env (Padrão Node/Vercel clássico)
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      // @ts-ignore
-      return process.env[key] || process.env[`VITE_${key}`] || "";
-    }
-  } catch (e) {
-    console.warn(`Erro ao tentar acessar variável ${key}:`, e);
+const localProvider: DBProvider = {
+  isLocal: true,
+  async getMembers(): Promise<Member[]> {
+    const data = localStorage.getItem('carnaval_members');
+    return data ? JSON.parse(data) : [];
+  },
+  async addMember(member: Member): Promise<void> {
+    const members = await this.getMembers();
+    localStorage.setItem('carnaval_members', JSON.stringify([member, ...members]));
+  },
+  async deleteMember(id: string): Promise<void> {
+    const members = await this.getMembers();
+    const filtered = members.filter(m => m.id !== id);
+    localStorage.setItem('carnaval_members', JSON.stringify(filtered));
   }
+};
+
+/**
+ * Tenta obter variáveis de ambiente de forma ultra-resiliente
+ */
+const getEnv = (key: string): string => {
+  try {
+    // Fix: Cast import.meta to any to avoid TypeScript error: Property 'env' does not exist on type 'ImportMeta'
+    const meta = import.meta as any;
+    if (meta && meta.env) {
+      const val = meta.env[`VITE_${key}`] || meta.env[key];
+      if (val) return val;
+    }
+    // Safely check for process.env which might be available via polyfills or build-time replacement
+    if (typeof process !== 'undefined' && process.env) {
+      const env = process.env as any;
+      const val = env[`VITE_${key}`] || env[key];
+      if (val) return val;
+    }
+  } catch (e) {}
   return "";
 };
 
+// Cliente Supabase instanciado preguiçosamente
+let supabaseInstance: SupabaseClient | null = null;
+
 /**
- * Inicializa o cliente apenas quando necessário.
+ * Retorna o provedor de dados adequado (Supabase ou Local)
  */
-const getSupabase = () => {
-  if (supabaseInstance) return supabaseInstance;
+const getProvider = (): DBProvider => {
+  const url = getEnv('SUPABASE_URL');
+  const key = getEnv('SUPABASE_ANON_KEY');
 
-  const supabaseUrl = getEnvVar('SUPABASE_URL');
-  const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("⚠️ ERRO DE CONFIGURAÇÃO:");
-    console.error("As variáveis SUPABASE_URL ou SUPABASE_ANON_KEY não foram encontradas.");
-    console.info("Dica: No Vercel, use os nomes VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.");
-    return null;
+  if (!url || !key) {
+    return localProvider;
   }
 
-  try {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-    return supabaseInstance;
-  } catch (err) {
-    console.error("❌ Falha crítica ao inicializar cliente Supabase:", err);
-    return null;
-  }
-};
-
-export const databaseService = {
-  /**
-   * Busca todos os membros do banco de dados real
-   */
-  async getMembers(): Promise<Member[]> {
-    const client = getSupabase();
-    if (!client) return [];
-
+  if (!supabaseInstance) {
     try {
-      const { data, error } = await client
+      supabaseInstance = createClient(url, key);
+    } catch (e) {
+      console.error("Erro ao criar cliente Supabase, usando LocalStorage", e);
+      return localProvider;
+    }
+  }
+
+  return {
+    isLocal: false,
+    async getMembers(): Promise<Member[]> {
+      const { data, error } = await supabaseInstance!
         .from('membros')
         .select('*')
         .order('createdAt', { ascending: false });
-
-      if (error) {
-        console.error("Erro Supabase (Select):", error.message);
-        return [];
-      }
-
+      if (error) throw error;
       return (data as Member[]) || [];
-    } catch (err) {
-      console.error("Erro de conexão ao buscar membros:", err);
-      return [];
+    },
+    async addMember(member: Member): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('membros')
+        .insert([member]);
+      if (error) throw error;
+    },
+    async deleteMember(id: string): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('membros')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
     }
-  },
+  };
+};
 
-  /**
-   * Adiciona um novo membro ao banco de dados real
-   */
-  async addMember(member: Member): Promise<void> {
-    const client = getSupabase();
-    if (!client) throw new Error("Supabase não configurado.");
-
-    const { error } = await client
-      .from('membros')
-      .insert([member]);
-
-    if (error) {
-      console.error("Erro Supabase (Insert):", error.message);
-      throw error;
-    }
-  },
-
-  /**
-   * Remove um membro do banco de dados real
-   */
-  async deleteMember(id: string): Promise<void> {
-    const client = getSupabase();
-    if (!client) throw new Error("Supabase não configurado.");
-
-    const { error } = await client
-      .from('membros')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error("Erro Supabase (Delete):", error.message);
-      throw error;
-    }
-  }
+export const databaseService = {
+  isConfigured: () => !getProvider().isLocal,
+  getMembers: () => getProvider().getMembers(),
+  addMember: (m: Member) => getProvider().addMember(m),
+  deleteMember: (id: string) => getProvider().deleteMember(id)
 };
