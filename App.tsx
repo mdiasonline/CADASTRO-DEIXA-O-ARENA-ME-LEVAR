@@ -16,7 +16,9 @@ import {
   Building,
   Camera,
   X,
-  User
+  User,
+  Filter,
+  ShieldCheck
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -24,6 +26,7 @@ const App: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterTipo, setFilterTipo] = useState('');
   const [isRegistered, setIsRegistered] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
@@ -61,6 +64,17 @@ const App: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: name === 'celular' ? maskPhone(value) : value }));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, photo: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -76,11 +90,23 @@ const App: React.FC = () => {
     setFormData({ nome: '', bloco: 'BLOCO 1', tipo: 'FOLIÃO', apto: '', celular: '', photo: undefined });
   };
 
-  const filteredMembers = useMemo(() => 
-    members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase())), 
-  [members, searchTerm]);
+  const removeMember = (id: string) => {
+    if (window.confirm('Remover este folião?')) {
+      setMembers(prev => prev.filter(m => m.id !== id));
+    }
+  };
 
-  const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white";
+  const filteredMembers = useMemo(() => 
+    members.filter(m => {
+      const matchesSearch = m.nome.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTipo = filterTipo === '' || m.tipo === filterTipo;
+      return matchesSearch && matchesTipo;
+    }), 
+  [members, searchTerm, filterTipo]);
+
+  const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all";
+
+  const cargos = ['FOLIÃO', 'BATERIA', 'DIRETORIA', 'RAINHA', 'DESTAQUE'];
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -125,14 +151,61 @@ const App: React.FC = () => {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="p-8 space-y-5">
+                {/* Opção de Foto */}
+                <div className="flex flex-col items-center gap-3">
+                  <div className="relative group">
+                    <div className="w-32 h-32 rounded-full border-4 border-[#2B4C7E] bg-gray-100 flex items-center justify-center overflow-hidden">
+                      {formData.photo ? (
+                        <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <User size={48} className="text-gray-300" />
+                      )}
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute bottom-0 right-0 bg-[#2B4C7E] text-white p-2 rounded-full shadow-lg hover:bg-[#C63D2F] transition-colors"
+                      title="Tirar foto ou escolher arquivo"
+                    >
+                      <Camera size={20} />
+                    </button>
+                    {formData.photo && (
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData(prev => ({...prev, photo: undefined}))}
+                        className="absolute top-0 right-0 bg-[#C63D2F] text-white p-1 rounded-full shadow-lg"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">FOTO OFICIAL DA ALA</p>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    accept="image/*" 
+                    capture="user" 
+                    className="hidden" 
+                    onChange={handleFileChange} 
+                  />
+                </div>
+
                 <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME COMPLETO" />
+                
                 <div className="grid grid-cols-2 gap-4">
                   <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
                     {['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'CONVIDADO'].map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
-                  <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="APARTAMENTO" />
+                  <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
+                    {cargos.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
-                <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="WHATSAPP (00) 00000-0000" />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="APARTAMENTO" />
+                  <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="WHATSAPP" />
+                </div>
+
                 <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-2xl font-arena text-2xl flex items-center justify-center gap-3">
                   {loading ? <Loader2 className="animate-spin" /> : "CONFIRMAR"}
                 </button>
@@ -143,20 +216,86 @@ const App: React.FC = () => {
 
         {view === ViewMode.LIST && (
           <div className="space-y-6 animate-fadeIn">
-            <div className="bg-white p-4 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3">
-              <Search className="text-[#2B4C7E]" />
-              <input placeholder="BUSCAR POR NOME..." className="flex-grow outline-none font-bold text-[#2B4C7E]" onChange={e => setSearchTerm(e.target.value)} />
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
+                <Search className="text-[#2B4C7E]" />
+                <input 
+                  placeholder="BUSCAR POR NOME..." 
+                  className="w-full outline-none font-bold text-[#2B4C7E]" 
+                  onChange={e => setSearchTerm(e.target.value)} 
+                />
+              </div>
+              <div className="md:w-64 bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
+                <Filter className="text-[#2B4C7E]" />
+                <select 
+                  className="w-full outline-none font-bold text-[#2B4C7E] bg-white cursor-pointer"
+                  value={filterTipo}
+                  onChange={e => setFilterTipo(e.target.value)}
+                >
+                  <option value="">TODOS OS CARGOS</option>
+                  {cargos.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
+
             <div className="grid gap-4">
-              {filteredMembers.map(m => (
-                <div key={m.id} className="bg-white p-4 rounded-xl border-2 border-[#2B4C7E] flex items-center justify-between shadow-sm">
-                  <div>
-                    <h4 className="font-arena text-xl text-[#2B4C7E]">{m.nome}</h4>
-                    <p className="text-xs font-bold text-gray-400 uppercase">{m.bloco} • APTO {m.apto || 'N/A'}</p>
-                  </div>
-                  <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-3 bg-green-500 text-white rounded-full"><MessageCircle size={20} /></a>
+              {filteredMembers.length === 0 ? (
+                <div className="text-center py-20 bg-white/50 rounded-3xl border-4 border-dashed border-[#2B4C7E]/20">
+                  <p className="font-arena text-2xl text-[#2B4C7E]/40">NENHUM FOLIÃO ENCONTRADO</p>
                 </div>
-              ))}
+              ) : (
+                filteredMembers.map(m => (
+                  <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E] flex flex-col md:flex-row gap-4 items-center shadow-lg hover:border-[#C63D2F] transition-colors group">
+                    {/* Foto e Info Principal */}
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-16 h-16 rounded-full border-2 border-[#2B4C7E] overflow-hidden shrink-0 bg-[#F9E7C7]">
+                        {m.photo ? (
+                          <img src={m.photo} className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="p-2 text-gray-300 w-full h-full" />
+                        )}
+                      </div>
+                      <div className="flex-grow">
+                        <h4 className="font-arena text-2xl text-[#2B4C7E] leading-none mb-1">{m.nome}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="px-2 py-0.5 bg-[#F9B115] text-[#2B4C7E] text-[10px] font-black rounded uppercase">{m.tipo}</span>
+                          <span className="px-2 py-0.5 bg-[#2B4C7E] text-white text-[10px] font-black rounded uppercase">{m.bloco}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detalhes Secundários */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-gray-400 uppercase">Apartamento</span>
+                        <span className="font-bold text-[#2B4C7E]">{m.apto || 'N/A'}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-gray-400 uppercase">Contato</span>
+                        <span className="font-bold text-[#2B4C7E] text-sm">{m.celular}</span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 col-span-2 md:col-span-1">
+                        <a 
+                          href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-md"
+                          title="Falar no WhatsApp"
+                        >
+                          <MessageCircle size={18} />
+                        </a>
+                        <button 
+                          onClick={() => removeMember(m.id)}
+                          className="p-3 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                          title="Remover Folião"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
