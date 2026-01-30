@@ -49,7 +49,7 @@ const App: React.FC = () => {
       const data = await databaseService.getMembers();
       setMembers(data);
       setSyncStatus(isOnline ? 'synced' : 'local');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
       setSyncStatus('local');
     } finally {
@@ -99,8 +99,11 @@ const App: React.FC = () => {
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
       if (!databaseService.isConfigured()) setSyncStatus('local');
-    } catch (error) {
-      alert("Erro ao gravar. Verifique se a tabela 'membros' existe no Supabase.");
+    } catch (error: any) {
+      console.error("Erro completo:", error);
+      const msg = error.message || "Erro desconhecido";
+      const code = error.code || "";
+      alert(`ERRO SUPABASE: ${msg} (Código: ${code}). Verifique se a tabela 'membros' existe e o RLS está desativado.`);
     } finally {
       setLoading(false);
       setFormData({ nome: '', bloco: 'BLOCO 1', tipo: 'FOLIÃO', apto: '', celular: '', photo: undefined });
@@ -112,8 +115,8 @@ const App: React.FC = () => {
     try {
       await databaseService.deleteMember(id);
       setMembers(prev => prev.filter(m => m.id !== id));
-    } catch (error) {
-      alert("Erro ao excluir.");
+    } catch (error: any) {
+      alert(`Erro ao excluir: ${error.message}`);
     }
   };
 
@@ -151,7 +154,7 @@ const App: React.FC = () => {
             <div className="bg-orange-200 p-2 rounded-full"><HardDrive size={20} /></div>
             <div>
               <p className="font-bold text-sm">Atenção: Rodando em Modo Local</p>
-              <p className="text-xs">Para salvar na nuvem, adicione as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no Vercel.</p>
+              <p className="text-xs">Para salvar na nuvem, adicione as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no Vercel e faça um Redeploy.</p>
             </div>
           </div>
         )}

@@ -2,7 +2,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Member } from "../types";
 
-// Interface para garantir que ambos os drivers (Supabase e Local) funcionem igual
 interface DBProvider {
   getMembers(): Promise<Member[]>;
   addMember(member: Member): Promise<void>;
@@ -10,10 +9,6 @@ interface DBProvider {
   isLocal: boolean;
 }
 
-/**
- * Driver de Fallback: LocalStorage
- * Usado quando as chaves do Supabase não estão configuradas.
- */
 const localProvider: DBProvider = {
   isLocal: true,
   async getMembers(): Promise<Member[]> {
@@ -31,22 +26,11 @@ const localProvider: DBProvider = {
   }
 };
 
-/**
- * Tenta obter variáveis de ambiente de forma ultra-resiliente
- */
 const getEnv = (key: string): string => {
   try {
-    // Cast para any para evitar erros de tipagem no ImportMeta
-    const meta = import.meta as any;
-    if (meta && meta.env) {
-      // Procura com prefixo VITE_ e sem prefixo
-      const val = meta.env[`VITE_${key}`] || meta.env[key];
-      if (val) return val;
-    }
-    
-    // Tenta via process.env (Vercel/Node)
-    if (typeof process !== 'undefined' && process.env) {
-      const env = process.env as any;
+    // @ts-ignore - Vite way
+    const env = import.meta.env;
+    if (env) {
       const val = env[`VITE_${key}`] || env[key];
       if (val) return val;
     }
@@ -54,14 +38,9 @@ const getEnv = (key: string): string => {
   return "";
 };
 
-// Cliente Supabase instanciado preguiçosamente
 let supabaseInstance: SupabaseClient | null = null;
 
-/**
- * Retorna o provedor de dados adequado (Supabase ou Local)
- */
 const getProvider = (): DBProvider => {
-  // Chamamos apenas o nome base, o getEnv cuida do prefixo VITE_
   const url = getEnv('SUPABASE_URL');
   const key = getEnv('SUPABASE_ANON_KEY');
 
@@ -70,12 +49,7 @@ const getProvider = (): DBProvider => {
   }
 
   if (!supabaseInstance) {
-    try {
-      supabaseInstance = createClient(url, key);
-    } catch (e) {
-      console.error("Erro ao criar cliente Supabase, usando LocalStorage", e);
-      return localProvider;
-    }
+    supabaseInstance = createClient(url, key);
   }
 
   return {
@@ -85,21 +59,45 @@ const getProvider = (): DBProvider => {
         .from('membros')
         .select('*')
         .order('createdAt', { ascending: false });
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Supabase Select Error:", error);
+        throw error;
+      }
       return (data as Member[]) || [];
     },
     async addMember(member: Member): Promise<void> {
+      // Normalizamos os dados para garantir que campos nulos não quebrem a query
+      const payload = {
+        id: member.id,
+        nome: member.nome,
+        bloco: member.bloco,
+        tipo: member.tipo,
+        apto: member.apto || '',
+        celular: member.celular,
+        photo: member.photo || '',
+        createdAt: member.createdAt
+      };
+
       const { error } = await supabaseInstance!
         .from('membros')
-        .insert([member]);
-      if (error) throw error;
+        .insert([payload]);
+      
+      if (error) {
+        console.error("Supabase Insert Error:", error);
+        throw error;
+      }
     },
     async deleteMember(id: string): Promise<void> {
       const { error } = await supabaseInstance!
         .from('membros')
         .delete()
         .eq('id', id);
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Supabase Delete Error:", error);
+        throw error;
+      }
     }
   };
 };
