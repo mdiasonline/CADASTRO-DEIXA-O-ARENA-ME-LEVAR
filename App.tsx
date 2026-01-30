@@ -18,7 +18,9 @@ import {
   DatabaseZap,
   HardDrive,
   Lock,
-  X
+  X,
+  BarChart3,
+  PieChart
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -31,15 +33,16 @@ const App: React.FC = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
   
-  // Estados para exclusão protegida
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  // Estados para acesso protegido
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   
   const defaultFormData = {
     nome: '',
-    bloco: '',
-    tipo: '',
+    bloco: 'BLOCO 1',
+    tipo: 'FOLIÃO',
     apto: '',
     celular: '',
     photo: '' as string | undefined
@@ -120,21 +123,44 @@ const App: React.FC = () => {
 
   const initiateRemoveMember = (id: string) => {
     setMemberIdToDelete(id);
+    setPasswordPurpose('DELETE');
     setPasswordInput('');
-    setIsDeleteModalOpen(true);
+    setIsPasswordModalOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
+  const initiateViewList = () => {
+    setPasswordPurpose('VIEW_LIST');
+    setPasswordInput('');
+    setIsPasswordModalOpen(true);
+  };
+
+  const initiateViewStats = () => {
+    setPasswordPurpose('VIEW_STATS');
+    setPasswordInput('');
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
-      if (!memberIdToDelete) return;
-      try {
-        await databaseService.deleteMember(memberIdToDelete);
-        setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
-        setIsDeleteModalOpen(false);
-        setMemberIdToDelete(null);
+      if (passwordPurpose === 'DELETE') {
+        if (!memberIdToDelete) return;
+        try {
+          await databaseService.deleteMember(memberIdToDelete);
+          setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
+          setIsPasswordModalOpen(false);
+          setMemberIdToDelete(null);
+          setPasswordInput('');
+        } catch (error: any) {
+          alert(`Erro ao excluir: ${error.message}`);
+        }
+      } else if (passwordPurpose === 'VIEW_LIST') {
+        setView(ViewMode.LIST);
+        setIsPasswordModalOpen(false);
         setPasswordInput('');
-      } catch (error: any) {
-        alert(`Erro ao excluir: ${error.message}`);
+      } else if (passwordPurpose === 'VIEW_STATS') {
+        setView(ViewMode.STATISTICS);
+        setIsPasswordModalOpen(false);
+        setPasswordInput('');
       }
     } else {
       alert('SENHA INCORRETA! ACESSO NEGADO.');
@@ -149,6 +175,25 @@ const App: React.FC = () => {
       return matchesSearch && matchesTipo;
     }), 
   [members, searchTerm, filterTipo]);
+
+  const stats = useMemo(() => {
+    const byBloco: Record<string, number> = {};
+    const byCargo: Record<string, number> = {};
+    
+    members.forEach(m => {
+      byBloco[m.bloco] = (byBloco[m.bloco] || 0) + 1;
+      byCargo[m.tipo] = (byCargo[m.tipo] || 0) + 1;
+    });
+
+    const sortedByBloco = Object.entries(byBloco).sort((a, b) => b[1] - a[1]);
+    const sortedByCargo = Object.entries(byCargo).sort((a, b) => b[1] - a[1]);
+    
+    return {
+      byBloco: sortedByBloco,
+      byCargo: sortedByCargo,
+      total: members.length
+    };
+  }, [members]);
 
   const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all";
   const cargos = ['FOLIÃO', 'BATERIA', 'DIRETORIA', 'RAINHA', 'DESTAQUE'];
@@ -207,12 +252,19 @@ const App: React.FC = () => {
               <h2 className="text-3xl font-arena text-[#2B4C7E]">NOVA INSCRIÇÃO</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Adicionar Folião</p>
             </button>
-            <button onClick={() => setView(ViewMode.LIST)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+            <button onClick={initiateViewList} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]">
                 <Users size={40} className="text-[#C63D2F]" />
               </div>
               <h2 className="text-3xl font-arena text-[#C63D2F]">GERENCIAR</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Lista de Membros</p>
+            </button>
+            <button onClick={initiateViewStats} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all md:col-span-2">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]">
+                <BarChart3 size={40} className="text-[#F9B115]" />
+              </div>
+              <h2 className="text-3xl font-arena text-[#F9B115]">ESTATÍSTICAS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Análise de Membros</p>
             </button>
           </div>
         )}
@@ -339,36 +391,124 @@ const App: React.FC = () => {
             )}
           </div>
         )}
+
+        {view === ViewMode.STATISTICS && (
+          <div className="space-y-8 animate-fadeIn">
+            {/* Resumo Geral */}
+            <div className="arena-card p-6 bg-white text-center">
+              <div className="w-16 h-16 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-[#2B4C7E]">
+                <Users size={32} className="text-[#2B4C7E]" />
+              </div>
+              <h2 className="text-5xl font-arena text-[#2B4C7E]">{stats.total}</h2>
+              <p className="font-bold text-gray-400 uppercase text-xs tracking-[0.2em]">Foliões Cadastrados</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Gráfico de Blocos */}
+              <div className="arena-card p-6 bg-white">
+                <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
+                  <BarChart3 className="text-[#2B4C7E]" />
+                  <h3 className="font-arena text-xl text-[#2B4C7E]">POR BLOCO</h3>
+                </div>
+                <div className="space-y-4">
+                  {stats.byBloco.length === 0 ? (
+                    <p className="text-center py-10 text-gray-300 font-bold text-xs">SEM DADOS</p>
+                  ) : (
+                    stats.byBloco.map(([name, count]) => {
+                      const percentage = (count / stats.total) * 100;
+                      return (
+                        <div key={name} className="space-y-1">
+                          <div className="flex justify-between items-end">
+                            <span className="text-[10px] font-black text-[#2B4C7E] uppercase">{name}</span>
+                            <span className="text-[10px] font-black text-gray-400">{count} ({percentage.toFixed(0)}%)</span>
+                          </div>
+                          <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                            <div 
+                              className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000 ease-out"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Gráfico de Cargos */}
+              <div className="arena-card p-6 bg-white">
+                <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
+                  <PieChart className="text-[#C63D2F]" />
+                  <h3 className="font-arena text-xl text-[#C63D2F]">POR CARGO</h3>
+                </div>
+                <div className="space-y-4">
+                  {stats.byCargo.length === 0 ? (
+                    <p className="text-center py-10 text-gray-300 font-bold text-xs">SEM DADOS</p>
+                  ) : (
+                    stats.byCargo.map(([name, count]) => {
+                      const percentage = (count / stats.total) * 100;
+                      return (
+                        <div key={name} className="space-y-1">
+                          <div className="flex justify-between items-end">
+                            <span className="text-[10px] font-black text-[#C63D2F] uppercase">{name}</span>
+                            <span className="text-[10px] font-black text-gray-400">{count} ({percentage.toFixed(0)}%)</span>
+                          </div>
+                          <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                            <div 
+                              className="h-full bg-[#C63D2F] rounded-full transition-all duration-1000 ease-out"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Modal de Senha para Exclusão */}
-      {isDeleteModalOpen && (
+      {/* Modal de Senha para Ações Protegidas */}
+      {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="arena-card w-full max-w-sm bg-white overflow-hidden animate-slideUp">
-            <div className="bg-[#C63D2F] p-4 flex justify-between items-center text-white">
-              <h3 className="font-arena text-xl flex items-center gap-2"><Lock size={20} /> ACESSO RESTRITO</h3>
-              <button onClick={() => setIsDeleteModalOpen(false)} className="hover:rotate-90 transition-transform"><X /></button>
+            <div className={`${passwordPurpose === 'DELETE' ? 'bg-[#C63D2F]' : passwordPurpose === 'VIEW_STATS' ? 'bg-[#F9B115]' : 'bg-[#2B4C7E]'} p-4 flex justify-between items-center text-white`}>
+              <h3 className="font-arena text-xl flex items-center gap-2 text-white">
+                <Lock size={20} /> 
+                {passwordPurpose === 'DELETE' ? 'EXCLUSÃO RESTRITA' : 
+                 passwordPurpose === 'VIEW_STATS' ? 'ESTATÍSTICAS RESTRITAS' : 
+                 'ACESSO RESTRITO'}
+              </h3>
+              <button onClick={() => setIsPasswordModalOpen(false)} className="hover:rotate-90 transition-transform"><X /></button>
             </div>
             <div className="p-8 space-y-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Informe a senha de administrador para excluir este folião:</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center">
+                {passwordPurpose === 'DELETE' 
+                  ? 'Informe a senha de administrador para excluir este folião:' 
+                  : passwordPurpose === 'VIEW_STATS' 
+                  ? 'Informe a senha de administrador para ver os números:'
+                  : 'Informe a senha de administrador para gerenciar a lista:'}
+              </p>
               <input 
                 type="password" 
                 value={passwordInput} 
                 onChange={(e) => setPasswordInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleConfirmDelete()}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmPassword()}
                 autoFocus
                 className={`${inputStyles} text-center tracking-widest`}
                 placeholder="SENHA"
               />
               <div className="flex gap-2">
                 <button 
-                  onClick={() => setIsDeleteModalOpen(false)} 
+                  onClick={() => setIsPasswordModalOpen(false)} 
                   className="flex-grow py-3 rounded-xl border-2 border-gray-200 font-bold text-gray-400 hover:bg-gray-50 transition-colors uppercase text-xs"
                 >
                   Cancelar
                 </button>
                 <button 
-                  onClick={handleConfirmDelete} 
+                  onClick={handleConfirmPassword} 
                   className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg"
                 >
                   CONFIRMAR
@@ -391,8 +531,11 @@ const App: React.FC = () => {
           <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60'}`}>
             <UserPlus size={24} /> <span className="text-[10px] font-bold">CADASTRO</span>
           </button>
-          <button onClick={() => setView(ViewMode.LIST)} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}>
+          <button onClick={() => { if(view !== ViewMode.LIST) initiateViewList(); }} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}>
             <Users size={24} /> <span className="text-[10px] font-bold">FOLIÕES</span>
+          </button>
+          <button onClick={() => { if(view !== ViewMode.STATISTICS) initiateViewStats(); }} className={`flex flex-col items-center ${view === ViewMode.STATISTICS ? 'text-[#F9B115]' : 'opacity-60'}`}>
+            <BarChart3 size={24} /> <span className="text-[10px] font-bold">STATS</span>
           </button>
         </div>
       </nav>

@@ -13,5 +13,6 @@ export interface Member {
 export enum ViewMode {
   HOME = 'HOME',
   REGISTER = 'REGISTER',
-  LIST = 'LIST'
+  LIST = 'LIST',
+  STATISTICS = 'STATISTICS'
 }
