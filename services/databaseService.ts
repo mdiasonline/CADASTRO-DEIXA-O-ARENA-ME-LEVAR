@@ -36,13 +36,15 @@ const localProvider: DBProvider = {
  */
 const getEnv = (key: string): string => {
   try {
-    // Fix: Cast import.meta to any to avoid TypeScript error: Property 'env' does not exist on type 'ImportMeta'
+    // Cast para any para evitar erros de tipagem no ImportMeta
     const meta = import.meta as any;
     if (meta && meta.env) {
+      // Procura com prefixo VITE_ e sem prefixo
       const val = meta.env[`VITE_${key}`] || meta.env[key];
       if (val) return val;
     }
-    // Safely check for process.env which might be available via polyfills or build-time replacement
+    
+    // Tenta via process.env (Vercel/Node)
     if (typeof process !== 'undefined' && process.env) {
       const env = process.env as any;
       const val = env[`VITE_${key}`] || env[key];
@@ -59,8 +61,9 @@ let supabaseInstance: SupabaseClient | null = null;
  * Retorna o provedor de dados adequado (Supabase ou Local)
  */
 const getProvider = (): DBProvider => {
-  //const url = getEnv('SUPABASE_URL');
-  //const key = getEnv('SUPABASE_ANON_KEY');
+  // Chamamos apenas o nome base, o getEnv cuida do prefixo VITE_
+  const url = getEnv('SUPABASE_URL');
+  const key = getEnv('SUPABASE_ANON_KEY');
 
   if (!url || !key) {
     return localProvider;
