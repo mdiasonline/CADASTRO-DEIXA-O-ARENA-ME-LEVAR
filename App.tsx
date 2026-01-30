@@ -14,7 +14,6 @@ import {
   Camera,
   User,
   Filter,
-  CloudCheck,
   CloudDownload,
   DatabaseZap,
   HardDrive
@@ -293,7 +292,6 @@ const App: React.FC = () => {
                       </div>
                       
                       <div className="flex flex-row items-center justify-between md:grid md:grid-cols-3 gap-4 w-full border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4">
-                        {/* Wrapper para Apto e WhatsApp ficarem próximos no mobile e no grid no desktop */}
                         <div className="flex flex-row gap-6 md:contents">
                           <div className="flex flex-col">
                             <span className="text-[8px] font-black text-gray-400 uppercase">Apto</span>
@@ -305,7 +303,6 @@ const App: React.FC = () => {
                           </div>
                         </div>
                         
-                        {/* Botões sempre alinhados à direita ou na 3a coluna */}
                         <div className="flex items-center justify-end gap-2 md:col-start-3">
                           <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
                           <button onClick={() => removeMember(m.id)} className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
@@ -319,6 +316,10 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      <footer className="py-6 text-center text-[#2B4C7E]/40 text-[10px] font-black uppercase tracking-widest mt-auto">
+        Desenvolvido por Maycon Dias
+      </footer>
 
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
