@@ -145,7 +145,7 @@ const App: React.FC = () => {
               {syncStatus === 'synced' && (
                 <>
                   <DatabaseZap size={14} className="text-green-400" />
-                  <span className="text-[10px] font-black tracking-widest uppercase">Cloud Online</span>
+                  <span className="text-[10px] font-black tracking-widest uppercase">Online</span>
                 </>
               )}
               {syncStatus === 'syncing' && (
