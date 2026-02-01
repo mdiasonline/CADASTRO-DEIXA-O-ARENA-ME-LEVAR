@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
@@ -65,7 +64,7 @@ const App: React.FC = () => {
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1000; // Reduzi um pouco para garantir leveza
+        const MAX_WIDTH = 1000;
         const MAX_HEIGHT = 1000;
         let width = img.width;
         let height = img.height;
@@ -86,7 +85,6 @@ const App: React.FC = () => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        // Qualidade 0.6 é ideal para armazenamento em banco
         resolve(canvas.toDataURL('image/jpeg', 0.6));
       };
     });
@@ -141,29 +139,40 @@ const App: React.FC = () => {
   };
 
   const handleMuralUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    if (files && files.length > 0) {
       setLoading(true);
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const compressed = await compressImage(reader.result as string);
+      // Explicitly cast to File[] to avoid 'unknown' type inference which causes line 155 error
+      const fileList = Array.from(files) as File[];
+      const uploadedPhotos: EventPhoto[] = [];
+
+      try {
+        for (const file of fileList) {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          const compressed = await compressImage(base64);
           const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
             url: compressed,
             createdAt: Date.now()
           };
+          
           await databaseService.addEventPhoto(newPhoto);
-          setEventPhotos(prev => [newPhoto, ...prev]);
-        } catch (err: any) {
-          console.error("Erro no upload mural:", err);
-          alert("Erro ao salvar no banco. Verifique se a tabela 'fotos_evento' existe no Supabase.");
-        } finally {
-          setLoading(false);
-          if (muralUploadRef.current) muralUploadRef.current.value = "";
+          uploadedPhotos.push(newPhoto);
         }
-      };
-      reader.readAsDataURL(file);
+        setEventPhotos(prev => [...uploadedPhotos, ...prev]);
+      } catch (err: any) {
+        console.error("Erro no upload mural:", err);
+        alert("Ocorreu um erro ao processar uma ou mais fotos. Verifique a tabela 'fotos_evento'.");
+      } finally {
+        setLoading(false);
+        if (muralUploadRef.current) muralUploadRef.current.value = "";
+      }
     }
   };
 
@@ -327,12 +336,12 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
               <div>
                 <h2 className="text-3xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                <p className="text-[10px] font-black uppercase text-gray-400">Fotos armazenadas no Banco</p>
+                <p className="text-[10px] font-black uppercase text-gray-400">Suporta upload de múltiplas fotos</p>
               </div>
               <button onClick={() => muralUploadRef.current?.click()} className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
               </button>
-              <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} />
+              <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
             </div>
             {fetching ? (
               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
