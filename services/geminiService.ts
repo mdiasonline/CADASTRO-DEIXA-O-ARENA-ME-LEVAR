@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export async function generateCarnivalSlogan(nome: string, bloco: string): Promise<string> {
@@ -24,54 +23,54 @@ export async function generateCarnivalSlogan(nome: string, bloco: string): Promi
 export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: string, url: string}[]): Promise<string[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Extrair base64 puras (remover prefixo data:image/...)
-  const getBase64 = (dataUrl: string) => dataUrl.split(',')[1];
+  const getBase64 = (dataUrl: string) => {
+    if (!dataUrl || !dataUrl.includes(',')) return dataUrl;
+    return dataUrl.split(',')[1];
+  };
 
   try {
-    // Preparar as partes para o Gemini
-    // Parte 1: Instrução
-    const textPart = {
-      text: `TASK: FACIAL RECOGNITION.
-      I am providing a REFERENCE image (the first image) and a list of TARGET images.
-      Identify which of the TARGET images contain the SAME person shown in the REFERENCE image.
-      Carnival context: People might be wearing glitter, masks, or costumes. Focus on facial features and structure.
-      RETURN: A JSON array containing ONLY the IDs of the matching TARGET images.
-      Example Output: ["id123", "id456"]`
-    };
-
-    // Parte 2: Imagem de referência
-    const referencePart = {
-      inlineData: {
-        mimeType: "image/jpeg",
-        data: getBase64(referencePhoto)
-      }
-    };
-
-    // Partes 3+: Imagens do mural com seus respectivos IDs
-    const targetParts = muralPhotos.flatMap(photo => [
-      { text: `TARGET_ID: ${photo.id}` },
-      {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: getBase64(photo.url)
-        }
-      }
-    ]);
-
+    // Usamos o gemini-3-pro-preview por ser uma tarefa complexa de análise visual e raciocínio
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: { 
-        parts: [textPart, referencePart, ...targetParts] 
-      },
+      model: "gemini-3-pro-preview",
+      contents: [
+        {
+          parts: [
+            { text: "REFERENCE IMAGE (This is the person we are looking for):" },
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: getBase64(referencePhoto)
+              }
+            },
+            { text: "Below are the images from the carnival mural. Each image is preceded by its ID. Analyze each one carefully." },
+            ...muralPhotos.flatMap(photo => [
+              { text: `TARGET_ID: ${photo.id}` },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: getBase64(photo.url)
+                }
+              }
+            ]),
+            { text: "Task: Identify which TARGET_IDs contain the SAME PERSON as in the REFERENCE IMAGE. Carnival context: ignore face paint, glitter, or simple masks; focus on the underlying facial structure. Return ONLY a JSON array of strings containing the IDs." }
+          ]
+        }
+      ],
       config: {
+        systemInstruction: "You are a professional facial recognition expert. Your task is to find matches between a reference person and a set of candidate photos from a carnival event. Be precise and account for lighting, angles, and carnival costumes. Return the result strictly as a JSON array of strings containing IDs.",
         responseMimeType: "application/json",
+        temperature: 0.1, // Baixa temperatura para maior consistência
       }
     });
 
-    const result = JSON.parse(response.text || "[]");
+    const textOutput = response.text || "[]";
+    // Limpeza básica para garantir que o parse funcione se o modelo retornar markdown blocks
+    const cleanedJson = textOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = JSON.parse(cleanedJson);
+    
     return Array.isArray(result) ? result : [];
   } catch (error) {
-    console.error("Erro na busca facial:", error);
+    console.error("Erro na busca facial Gemini:", error);
     return [];
   }
 }
