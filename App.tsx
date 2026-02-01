@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Member, ViewMode } from './types';
+import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
 import { 
   Users, 
@@ -24,12 +24,14 @@ import {
   Image as ImageIcon,
   Download,
   Share2,
-  Upload
+  Upload,
+  PlusCircle
 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.HOME);
   const [members, setMembers] = useState<Member[]>([]);
+  const [eventPhotos, setEventPhotos] = useState<EventPhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,7 +42,7 @@ const App: React.FC = () => {
   // Estados para acesso protegido
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'VIEW_PHOTOS' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   
   const defaultFormData = {
@@ -56,14 +58,19 @@ const App: React.FC = () => {
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const muralUploadRef = useRef<HTMLInputElement>(null);
 
-  const loadMembers = async () => {
+  const loadData = async () => {
     setFetching(true);
     setSyncStatus('syncing');
     try {
       const isOnline = databaseService.isConfigured();
-      const data = await databaseService.getMembers();
-      setMembers(data);
+      const [membersData, photosData] = await Promise.all([
+        databaseService.getMembers(),
+        databaseService.getEventPhotos()
+      ]);
+      setMembers(membersData);
+      setEventPhotos(photosData);
       setSyncStatus(isOnline ? 'synced' : 'local');
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
@@ -74,7 +81,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    loadMembers();
+    loadData();
   }, []);
 
   const maskPhone = (value: string) => {
@@ -100,6 +107,30 @@ const App: React.FC = () => {
     }
   };
 
+  const handleMuralUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLoading(true);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const newPhoto: EventPhoto = {
+          id: Math.random().toString(36).substring(7),
+          url: reader.result as string,
+          createdAt: Date.now()
+        };
+        try {
+          await databaseService.addEventPhoto(newPhoto);
+          setEventPhotos(prev => [newPhoto, ...prev]);
+        } catch (err) {
+          alert("Erro ao salvar foto no mural.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -114,12 +145,8 @@ const App: React.FC = () => {
       await databaseService.addMember(newMember);
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
-      if (!databaseService.isConfigured()) setSyncStatus('local');
     } catch (error: any) {
-      console.error("Erro completo:", error);
-      const msg = error.message || "Erro desconhecido";
-      const code = error.code || "";
-      alert(`ERRO SUPABASE: ${msg} (Código: ${code}). Verifique se a tabela 'membros' existe e o RLS está desativado.`);
+      alert(`Erro ao salvar membro.`);
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -145,105 +172,63 @@ const App: React.FC = () => {
     setIsPasswordModalOpen(true);
   };
 
-  const initiateViewPhotos = () => {
-    setPasswordPurpose('VIEW_PHOTOS');
-    setPasswordInput('');
-    setIsPasswordModalOpen(true);
-  };
-
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
-      if (passwordPurpose === 'DELETE') {
-        if (!memberIdToDelete) return;
-        try {
-          await databaseService.deleteMember(memberIdToDelete);
-          setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
-          setIsPasswordModalOpen(false);
-          setMemberIdToDelete(null);
-          setPasswordInput('');
-        } catch (error: any) {
-          alert(`Erro ao excluir: ${error.message}`);
-        }
+      if (passwordPurpose === 'DELETE' && memberIdToDelete) {
+        await databaseService.deleteMember(memberIdToDelete);
+        setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
+        setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
         setIsPasswordModalOpen(false);
-        setPasswordInput('');
       } else if (passwordPurpose === 'VIEW_STATS') {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
-        setPasswordInput('');
-      } else if (passwordPurpose === 'VIEW_PHOTOS') {
-        setView(ViewMode.PHOTOS);
-        setIsPasswordModalOpen(false);
-        setPasswordInput('');
       }
     } else {
-      alert('SENHA INCORRETA! ACESSO NEGADO.');
-      setPasswordInput('');
+      alert('SENHA INCORRETA!');
     }
+    setPasswordInput('');
   };
 
-  const handleDownloadPhoto = (m: Member) => {
-    if (!m.photo) return;
+  const handleDownloadPhoto = (url?: string, name?: string) => {
+    if (!url) return;
     const link = document.createElement('a');
-    link.href = m.photo;
-    link.download = `foto_${m.nome.replace(/\s+/g, '_').toLowerCase()}.jpg`;
+    link.href = url;
+    link.download = `folia_${name || Date.now()}.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const handleSharePhoto = async (m: Member) => {
-    if (!m.photo) return;
-    
+  const handleSharePhoto = async (url?: string) => {
+    if (!url) return;
     try {
-      const res = await fetch(m.photo);
+      const res = await fetch(url);
       const blob = await res.blob();
-      const file = new File([blob], `${m.nome}_carnaval.jpg`, { type: 'image/jpeg' });
-
+      const file = new File([blob], `folia_arena.jpg`, { type: 'image/jpeg' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Folia 2026',
-          text: `Olha a foto do(a) ${m.nome} no ${m.bloco}! 🎉`,
-        });
+        await navigator.share({ files: [file], title: 'Carnaval 2026' });
       } else {
-        const text = encodeURIComponent(`Olha a foto de ${m.nome} no ${m.bloco}! (Baixe a foto no app para enviar o arquivo)`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
+        window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval!')}`, '_blank');
       }
-    } catch (error) {
-      console.error("Erro ao compartilhar:", error);
-      alert("Não foi possível compartilhar diretamente. Tente baixar a foto primeiro.");
-    }
+    } catch (e) { alert("Download a foto primeiro para compartilhar."); }
   };
 
   const filteredMembers = useMemo(() => 
-    members.filter(m => {
-      const matchesSearch = m.nome.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesTipo = filterTipo === '' || m.tipo === filterTipo;
-      return matchesSearch && matchesTipo;
-    }), 
+    members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase()) && (filterTipo === '' || m.tipo === filterTipo)), 
   [members, searchTerm, filterTipo]);
-
-  const membersWithPhotos = useMemo(() => 
-    filteredMembers.filter(m => m.photo),
-  [filteredMembers]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
     const byCargo: Record<string, number> = {};
-    
     members.forEach(m => {
       byBloco[m.bloco] = (byBloco[m.bloco] || 0) + 1;
       byCargo[m.tipo] = (byCargo[m.tipo] || 0) + 1;
     });
-
-    const sortedByBloco = Object.entries(byBloco).sort((a, b) => b[1] - a[1]);
-    const sortedByCargo = Object.entries(byCargo).sort((a, b) => b[1] - a[1]);
-    
     return {
-      byBloco: sortedByBloco,
-      byCargo: sortedByCargo,
+      byBloco: Object.entries(byBloco).sort((a,b) => b[1]-a[1]),
+      byCargo: Object.entries(byCargo).sort((a,b) => b[1]-a[1]),
       total: members.length
     };
   }, [members]);
@@ -255,47 +240,15 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center flex flex-col items-center">
-            <h1 className="text-3xl md:text-5xl font-arena tracking-tighter">
-              CADASTRO <span className="text-[#F9B115]">DA FOLIA</span>
-            </h1>
-            
-            <div className="mt-3 flex items-center gap-2 px-4 py-1.5 bg-black/20 rounded-full border border-white/10 w-fit animate-fadeIn">
-              {syncStatus === 'synced' && (
-                <>
-                  <DatabaseZap size={14} className="text-green-400" />
-                  <span className="text-[10px] font-black tracking-widest uppercase">Online</span>
-                </>
-              )}
-              {syncStatus === 'syncing' && (
-                <>
-                  <CloudDownload size={14} className="text-yellow-400 animate-pulse" />
-                  <span className="text-[10px] font-black tracking-widest uppercase">Sincronizando</span>
-                </>
-              )}
-              {syncStatus === 'local' && (
-                <>
-                  <HardDrive size={14} className="text-orange-400" />
-                  <span className="text-[10px] font-black tracking-widest uppercase">Modo Local (Offline)</span>
-                </>
-              )}
-            </div>
-          </div>
+        <div className="container mx-auto px-4 text-center flex flex-col items-center">
+          <h1 className="text-3xl md:text-5xl font-arena tracking-tighter">
+            CADASTRO <span className="text-[#F9B115]">DA FOLIA</span>
+          </h1>
+          <div className="mt-2 text-[10px] font-black uppercase tracking-widest opacity-60">Carnaval 2026</div>
         </div>
       </header>
 
       <main className="flex-grow container mx-auto max-w-4xl px-4 py-8">
-        {syncStatus === 'local' && (
-          <div className="mb-6 p-4 bg-orange-50 border-2 border-orange-200 rounded-2xl flex items-center gap-4 text-orange-800 animate-fadeIn">
-            <div className="bg-orange-200 p-2 rounded-full"><HardDrive size={20} /></div>
-            <div>
-              <p className="font-bold text-sm">Atenção: Rodando em Modo Local</p>
-              <p className="text-xs">Para salvar na nuvem, adicione as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no Vercel e faça um Redeploy.</p>
-            </div>
-          </div>
-        )}
-
         {view === ViewMode.HOME && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn mt-6">
             <button onClick={() => setView(ViewMode.REGISTER)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
@@ -303,236 +256,99 @@ const App: React.FC = () => {
                 <UserPlus size={40} className="text-[#2B4C7E]" />
               </div>
               <h2 className="text-3xl font-arena text-[#2B4C7E]">NOVA INSCRIÇÃO</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Adicionar Folião</p>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Cadastro de Folião</p>
+            </button>
+            <button onClick={() => setView(ViewMode.PHOTOS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]">
+                <ImageIcon size={40} className="text-[#F9B115]" />
+              </div>
+              <h2 className="text-3xl font-arena text-[#F9B115]">MURAL DE FOTOS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
             </button>
             <button onClick={initiateViewList} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]">
                 <Users size={40} className="text-[#C63D2F]" />
               </div>
-              <h2 className="text-3xl font-arena text-[#C63D2F]">GERENCIAR</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Lista de Membros</p>
-            </button>
-            <button onClick={initiateViewPhotos} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]">
-                <ImageIcon size={40} className="text-[#2B4C7E]" />
-              </div>
-              <h2 className="text-3xl font-arena text-[#2B4C7E]">GALERIA</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Fotos dos Foliões</p>
+              <h2 className="text-3xl font-arena text-[#C63D2F]">LISTA PRIVADA</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Apenas com Senha</p>
             </button>
             <button onClick={initiateViewStats} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]">
-                <BarChart3 size={40} className="text-[#F9B115]" />
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400">
+                <BarChart3 size={40} className="text-gray-500" />
               </div>
-              <h2 className="text-3xl font-arena text-[#F9B115]">ESTATÍSTICAS</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Análise de Membros</p>
+              <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados do Bloco</p>
             </button>
           </div>
         )}
 
         {view === ViewMode.REGISTER && (
           <div className="max-w-md mx-auto arena-card overflow-hidden bg-white animate-slideUp">
-            <div className="bg-[#2B4C7E] p-4 text-center text-white">
-              <h2 className="text-2xl font-arena uppercase tracking-widest">NOVO REGISTRO</h2>
-            </div>
-            {isRegistered ? (
-              <div className="p-10 text-center">
-                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500">
-                  <Trophy size={40} />
-                </div>
-                <h3 className="text-2xl font-arena text-[#2B4C7E] mb-2">GRAVADO!</h3>
-                <p className="text-xs font-bold text-gray-400 mb-8 uppercase tracking-widest">Salvo no {syncStatus === 'local' ? 'Navegador' : 'Banco Cloud'}</p>
-                <button onClick={() => setIsRegistered(false)} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase tracking-widest">FAZER OUTRO</button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="p-8 space-y-5">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative group">
-                    <div className="w-32 h-32 rounded-full border-4 border-[#2B4C7E] bg-gray-50 flex items-center justify-center overflow-hidden">
-                      {formData.photo ? (
-                        <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <User size={48} className="text-gray-300" />
-                      )}
-                    </div>
-                    <div className="absolute -bottom-2 -right-2 flex gap-2">
-                      <button 
-                        type="button" 
-                        onClick={() => cameraInputRef.current?.click()} 
-                        className="bg-[#2B4C7E] text-white p-3 rounded-full shadow-lg hover:bg-[#C63D2F] transition-colors border-2 border-white"
-                        title="Tirar Foto"
-                      >
-                        <Camera size={20} />
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => galleryInputRef.current?.click()} 
-                        className="bg-[#F9B115] text-[#2B4C7E] p-3 rounded-full shadow-lg hover:bg-white transition-colors border-2 border-white"
-                        title="Enviar da Galeria"
-                      >
-                        <Upload size={20} />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sua foto de Folião</p>
-                  
-                  {/* Input oculto para Câmera */}
-                  <input 
-                    type="file" 
-                    ref={cameraInputRef} 
-                    accept="image/*" 
-                    capture="user" 
-                    className="hidden" 
-                    onChange={handleFileChange} 
-                  />
-                  
-                  {/* Input oculto para Galeria/Upload */}
-                  <input 
-                    type="file" 
-                    ref={galleryInputRef} 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleFileChange} 
-                  />
-                </div>
-
-                <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME COMPLETO" />
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
-                    {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
-                    {cargos.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="APTO" />
-                  <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="WHATSAPP" />
-                </div>
-
-                <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-2xl font-arena text-2xl flex items-center justify-center gap-3">
-                  {loading ? <Loader2 className="animate-spin" /> : "GRAVAR"}
-                </button>
-              </form>
-            )}
-          </div>
-        )}
-
-        {view === ViewMode.LIST && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
-                <Search className="text-[#2B4C7E]" />
-                <input placeholder="PESQUISAR..." className="w-full outline-none font-bold text-[#2B4C7E]" onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-              <div className="md:w-64 bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
-                <Filter className="text-[#2B4C7E]" />
-                <select className="w-full outline-none font-bold text-[#2B4C7E] bg-white" value={filterTipo} onChange={e => setFilterTipo(e.target.value)}>
-                  <option value="">TODOS</option>
-                  {cargos.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {fetching ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <Loader2 className="animate-spin text-[#2B4C7E]" size={48} />
-                <p className="font-arena text-xl text-[#2B4C7E] animate-pulse">CARREGANDO...</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredMembers.length === 0 ? (
-                  <div className="text-center py-20 opacity-30">
-                    <Users size={64} className="mx-auto mb-4" />
-                    <p className="font-arena text-2xl">NENHUM FOLIÃO ENCONTRADO</p>
-                  </div>
-                ) : (
-                  filteredMembers.map(m => (
-                    <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E] flex flex-col md:flex-row gap-4 items-center shadow-lg hover:border-[#C63D2F] transition-all">
-                      <div className="flex items-center gap-4 w-full">
-                        <div className="w-14 h-14 rounded-full border-2 border-[#2B4C7E] overflow-hidden shrink-0 bg-[#F9E7C7]">
-                          {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-2 text-gray-300 w-full h-full" />}
-                        </div>
-                        <div className="flex-grow">
-                          <h4 className="font-arena text-xl text-[#2B4C7E] leading-none mb-1">{m.nome}</h4>
-                          <div className="flex gap-2">
-                            <span className="px-2 py-0.5 bg-[#F9B115] text-[#2B4C7E] text-[9px] font-black rounded uppercase">{m.tipo}</span>
-                            <span className="px-2 py-0.5 bg-[#2B4C7E] text-white text-[9px] font-black rounded uppercase">{m.bloco}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-row items-center justify-between md:grid md:grid-cols-3 gap-4 w-full border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4">
-                        <div className="flex flex-row gap-6 md:contents">
-                          <div className="flex flex-col">
-                            <span className="text-[8px] font-black text-gray-400 uppercase">Apto</span>
-                            <span className="font-bold text-[#2B4C7E] text-sm">{m.apto || '-'}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[8px] font-black text-gray-400 uppercase">WhatsApp</span>
-                            <span className="font-bold text-[#2B4C7E] text-xs">{m.celular}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center justify-end gap-2 md:col-start-3">
-                          <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
-                          <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><Trash2 size={16} /></button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+             <div className="bg-[#2B4C7E] p-4 text-center text-white"><h2 className="text-2xl font-arena">INSCRIÇÃO</h2></div>
+             {isRegistered ? (
+               <div className="p-10 text-center">
+                 <Trophy size={60} className="mx-auto text-green-500 mb-4" />
+                 <h3 className="text-2xl font-arena text-[#2B4C7E]">CADASTRO OK!</h3>
+                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">OUTRO</button>
+               </div>
+             ) : (
+               <form onSubmit={handleSubmit} className="p-8 space-y-5">
+                 <div className="flex flex-col items-center">
+                   <div className="relative w-28 h-28 border-4 border-[#2B4C7E] rounded-full overflow-hidden bg-gray-50">
+                     {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-6 text-gray-200" />}
+                   </div>
+                   <div className="flex gap-2 mt-3">
+                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full"><Camera size={18} /></button>
+                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full"><Upload size={18} /></button>
+                   </div>
+                   <input type="file" ref={cameraInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
+                   <input type="file" ref={galleryInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
+                 </div>
+                 <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME COMPLETO" />
+                 <div className="grid grid-cols-2 gap-4">
+                   <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>{blocosDisponiveis.map(b => <option key={b}>{b}</option>)}</select>
+                   <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>{cargos.map(c => <option key={c}>{c}</option>)}</select>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="APTO" />
+                   <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="WHATSAPP" />
+                 </div>
+                 <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-2xl font-arena text-2xl">{loading ? <Loader2 className="animate-spin mx-auto" /> : "CADASTRAR"}</button>
+               </form>
+             )}
           </div>
         )}
 
         {view === ViewMode.PHOTOS && (
           <div className="space-y-8 animate-fadeIn">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
-                <Search className="text-[#2B4C7E]" />
-                <input placeholder="BUSCAR POR NOME..." className="w-full outline-none font-bold text-[#2B4C7E]" onChange={e => setSearchTerm(e.target.value)} />
+            <div className="flex justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
+              <div>
+                <h2 className="text-3xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
+                <p className="text-[10px] font-black uppercase text-gray-400">Poste as fotos do seu bloco aqui!</p>
               </div>
+              <button 
+                onClick={() => muralUploadRef.current?.click()} 
+                className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
+              </button>
+              <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} />
             </div>
 
-            {membersWithPhotos.length === 0 ? (
+            {eventPhotos.length === 0 ? (
               <div className="text-center py-20 opacity-30">
                 <ImageIcon size={64} className="mx-auto mb-4" />
-                <p className="font-arena text-2xl uppercase">Nenhuma foto encontrada</p>
+                <p className="font-arena text-2xl">MURAL VAZIO. SEJA O PRIMEIRO!</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {membersWithPhotos.map(m => (
-                  <div key={m.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform">
-                    <div className="aspect-square w-full relative">
-                      <img src={m.photo} className="w-full h-full object-cover" alt={m.nome} />
+                {eventPhotos.map(p => (
+                  <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform">
+                    <div className="aspect-square relative">
+                      <img src={p.url} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                        <button 
-                          onClick={() => handleDownloadPhoto(m)}
-                          className="p-3 bg-white text-[#2B4C7E] rounded-full hover:bg-[#F9B115] transition-colors"
-                          title="Baixar Foto"
-                        >
-                          <Download size={24} />
-                        </button>
-                        <button 
-                          onClick={() => handleSharePhoto(m)}
-                          className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform shadow-lg"
-                          title="Enviar p/ WhatsApp"
-                        >
-                          <Share2 size={24} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="p-4 border-t-2 border-[#2B4C7E]">
-                      <h4 className="font-arena text-lg text-[#2B4C7E] truncate">{m.nome}</h4>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-[10px] font-black bg-[#F9B115] px-2 py-0.5 rounded uppercase">{m.bloco}</span>
-                        <div className="flex gap-2">
-                           <button onClick={() => handleDownloadPhoto(m)} className="sm:hidden p-1 text-[#2B4C7E]"><Download size={18} /></button>
-                           <button onClick={() => handleSharePhoto(m)} className="sm:hidden p-1 text-[#25D366]"><Share2 size={18} /></button>
-                        </div>
+                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full"><Download size={24} /></button>
+                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full"><Share2 size={24} /></button>
                       </div>
                     </div>
                   </div>
@@ -542,148 +358,83 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {view === ViewMode.LIST && (
+           <div className="space-y-6 animate-fadeIn">
+              <div className="flex gap-4">
+                <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3">
+                  <Search className="text-[#2B4C7E]" />
+                  <input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid gap-4">
+                {filteredMembers.map(m => (
+                  <div key={m.id} className="bg-white p-4 rounded-2xl border-2 border-[#2B4C7E] flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full border-2 border-[#2B4C7E] overflow-hidden">
+                      {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-2 text-gray-200" />}
+                    </div>
+                    <div className="flex-grow">
+                      <h4 className="font-arena text-lg leading-none">{m.nome}</h4>
+                      <span className="text-[9px] font-black uppercase text-[#F9B115]">{m.bloco}</span>
+                    </div>
+                    <div className="flex gap-2">
+                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full"><MessageCircle size={16} /></a>
+                       <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-100 text-red-600 rounded-full"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+           </div>
+        )}
+
         {view === ViewMode.STATISTICS && (
-          <div className="space-y-8 animate-fadeIn">
-            <div className="arena-card p-6 bg-white text-center">
-              <div className="w-16 h-16 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-[#2B4C7E]">
-                <Users size={32} className="text-[#2B4C7E]" />
+           <div className="space-y-8 animate-fadeIn">
+              <div className="arena-card p-6 text-center">
+                 <h2 className="text-6xl font-arena text-[#2B4C7E]">{stats.total}</h2>
+                 <p className="font-black uppercase text-xs text-gray-400">Total de Foliões</p>
               </div>
-              <h2 className="text-5xl font-arena text-[#2B4C7E]">{stats.total}</h2>
-              <p className="font-bold text-gray-400 uppercase text-xs tracking-[0.2em]">Foliões Cadastrados</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="arena-card p-6 bg-white">
-                <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
-                  <BarChart3 className="text-[#2B4C7E]" />
-                  <h3 className="font-arena text-xl text-[#2B4C7E]">POR BLOCO</h3>
-                </div>
-                <div className="space-y-4">
-                  {stats.byBloco.length === 0 ? (
-                    <p className="text-center py-10 text-gray-300 font-bold text-xs">SEM DADOS</p>
-                  ) : (
-                    stats.byBloco.map(([name, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={name} className="space-y-1">
-                          <div className="flex justify-between items-end">
-                            <span className="text-[10px] font-black text-[#2B4C7E] uppercase">{name}</span>
-                            <span className="text-[10px] font-black text-gray-400">{count} ({percentage.toFixed(0)}%)</span>
-                          </div>
-                          <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                            <div 
-                              className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000 ease-out"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="arena-card p-6">
+                    <h3 className="font-arena text-xl mb-4">BLOCOS</h3>
+                    {stats.byBloco.map(([n, c]) => (
+                      <div key={n} className="mb-2">
+                        <div className="flex justify-between text-[10px] font-black"><span>{n}</span><span>{c}</span></div>
+                        <div className="h-2 bg-gray-100 rounded-full"><div className="h-full bg-[#2B4C7E] rounded-full" style={{width: `${(c/stats.total)*100}%`}}></div></div>
+                      </div>
+                    ))}
+                 </div>
               </div>
-
-              <div className="arena-card p-6 bg-white">
-                <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
-                  <PieChart className="text-[#C63D2F]" />
-                  <h3 className="font-arena text-xl text-[#C63D2F]">POR CARGO</h3>
-                </div>
-                <div className="space-y-4">
-                  {stats.byCargo.length === 0 ? (
-                    <p className="text-center py-10 text-gray-300 font-bold text-xs">SEM DADOS</p>
-                  ) : (
-                    stats.byCargo.map(([name, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={name} className="space-y-1">
-                          <div className="flex justify-between items-end">
-                            <span className="text-[10px] font-black text-[#C63D2F] uppercase">{name}</span>
-                            <span className="text-[10px] font-black text-gray-400">{count} ({percentage.toFixed(0)}%)</span>
-                          </div>
-                          <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                            <div 
-                              className="h-full bg-[#C63D2F] rounded-full transition-all duration-1000 ease-out"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+           </div>
         )}
       </main>
 
-      {/* Modal de Senha para Ações Protegidas */}
+      {/* Modal de Senha */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="arena-card w-full max-w-sm bg-white overflow-hidden animate-slideUp">
-            <div className={`${passwordPurpose === 'DELETE' ? 'bg-[#C63D2F]' : passwordPurpose === 'VIEW_STATS' ? 'bg-[#F9B115]' : 'bg-[#2B4C7E]'} p-4 flex justify-between items-center text-white`}>
-              <h3 className="font-arena text-xl flex items-center gap-2 text-white">
-                <Lock size={20} /> 
-                {passwordPurpose === 'DELETE' ? 'EXCLUSÃO RESTRITA' : 
-                 passwordPurpose === 'VIEW_STATS' ? 'ESTATÍSTICAS RESTRITAS' : 
-                 passwordPurpose === 'VIEW_PHOTOS' ? 'GALERIA RESTRITA' :
-                 'ACESSO RESTRITO'}
-              </h3>
-              <button onClick={() => setIsPasswordModalOpen(false)} className="hover:rotate-90 transition-transform"><X /></button>
-            </div>
-            <div className="p-8 space-y-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center">
-                Informe a senha de administrador para continuar:
-              </p>
-              <input 
-                type="password" 
-                value={passwordInput} 
-                onChange={(e) => setPasswordInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleConfirmPassword()}
-                autoFocus
-                className={`${inputStyles} text-center tracking-widest`}
-                placeholder="SENHA"
-              />
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setIsPasswordModalOpen(false)} 
-                  className="flex-grow py-3 rounded-xl border-2 border-gray-200 font-bold text-gray-400 hover:bg-gray-50 transition-colors uppercase text-xs"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleConfirmPassword} 
-                  className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg"
-                >
-                  CONFIRMAR
-                </button>
-              </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <div className="arena-card w-full max-w-sm bg-white p-8">
+            <h3 className="font-arena text-xl mb-4 text-center">ÁREA RESTRITA</h3>
+            <input 
+              type="password" 
+              value={passwordInput} 
+              onChange={e => setPasswordInput(e.target.value)}
+              className={inputStyles}
+              placeholder="SENHA"
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()}
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setIsPasswordModalOpen(false)} className="flex-grow py-2 border-2 rounded-xl font-bold uppercase text-xs">Sair</button>
+              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-2 rounded-xl font-arena">Entrar</button>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="py-6 text-center text-[#2B4C7E]/40 text-[10px] font-black uppercase tracking-widest mt-auto">
-        Desenvolvido por Maycon Dias
-      </footer>
-
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <Home size={24} /> <span className="text-[10px] font-bold">INÍCIO</span>
-          </button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <UserPlus size={24} /> <span className="text-[10px] font-bold">CADASTRO</span>
-          </button>
-          <button onClick={() => { if(view !== ViewMode.LIST) initiateViewList(); }} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <Users size={24} /> <span className="text-[10px] font-bold">LISTA</span>
-          </button>
-          <button onClick={() => { if(view !== ViewMode.PHOTOS) initiateViewPhotos(); }} className={`flex flex-col items-center ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <ImageIcon size={24} /> <span className="text-[10px] font-bold">GALERIA</span>
-          </button>
-          <button onClick={() => { if(view !== ViewMode.STATISTICS) initiateViewStats(); }} className={`flex flex-col items-center ${view === ViewMode.STATISTICS ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <BarChart3 size={24} /> <span className="text-[10px] font-bold">STATS</span>
-          </button>
+          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60'}`}><Home size={24} /><span className="text-[8px] font-bold">INÍCIO</span></button>
+          <button onClick={() => setView(ViewMode.REGISTER)} className={`flex flex-col items-center ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60'}`}><UserPlus size={24} /><span className="text-[8px] font-bold">CADASTRO</span></button>
+          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold">MURAL</span></button>
+          <button onClick={initiateViewList} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}><Users size={24} /><span className="text-[8px] font-bold">LISTA</span></button>
         </div>
       </nav>
 

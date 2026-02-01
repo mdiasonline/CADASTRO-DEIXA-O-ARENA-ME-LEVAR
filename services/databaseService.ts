@@ -1,11 +1,14 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Member } from "../types";
+import { Member, EventPhoto } from "../types";
 
 interface DBProvider {
   getMembers(): Promise<Member[]>;
   addMember(member: Member): Promise<void>;
   deleteMember(id: string): Promise<void>;
+  // Event Photos
+  getEventPhotos(): Promise<EventPhoto[]>;
+  addEventPhoto(photo: EventPhoto): Promise<void>;
   isLocal: boolean;
 }
 
@@ -23,6 +26,14 @@ const localProvider: DBProvider = {
     const members = await this.getMembers();
     const filtered = members.filter(m => m.id !== id);
     localStorage.setItem('carnaval_members', JSON.stringify(filtered));
+  },
+  async getEventPhotos(): Promise<EventPhoto[]> {
+    const data = localStorage.getItem('carnaval_event_photos');
+    return data ? JSON.parse(data) : [];
+  },
+  async addEventPhoto(photo: EventPhoto): Promise<void> {
+    const photos = await this.getEventPhotos();
+    localStorage.setItem('carnaval_event_photos', JSON.stringify([photo, ...photos]));
   }
 };
 
@@ -60,44 +71,35 @@ const getProvider = (): DBProvider => {
         .select('*')
         .order('createdAt', { ascending: false });
       
-      if (error) {
-        console.error("Supabase Select Error:", error);
-        throw error;
-      }
+      if (error) throw error;
       return (data as Member[]) || [];
     },
     async addMember(member: Member): Promise<void> {
-      // Normalizamos os dados para garantir que campos nulos não quebrem a query
-      const payload = {
-        id: member.id,
-        nome: member.nome,
-        bloco: member.bloco,
-        tipo: member.tipo,
-        apto: member.apto || '',
-        celular: member.celular,
-        photo: member.photo || '',
-        createdAt: member.createdAt
-      };
-
       const { error } = await supabaseInstance!
         .from('membros')
-        .insert([payload]);
-      
-      if (error) {
-        console.error("Supabase Insert Error:", error);
-        throw error;
-      }
+        .insert([member]);
+      if (error) throw error;
     },
     async deleteMember(id: string): Promise<void> {
       const { error } = await supabaseInstance!
-        .from('membros')
+        .from('id', id)
         .delete()
         .eq('id', id);
-      
-      if (error) {
-        console.error("Supabase Delete Error:", error);
-        throw error;
-      }
+      if (error) throw error;
+    },
+    async getEventPhotos(): Promise<EventPhoto[]> {
+      const { data, error } = await supabaseInstance!
+        .from('fotos_evento')
+        .select('*')
+        .order('createdAt', { ascending: false });
+      if (error) return [];
+      return (data as EventPhoto[]) || [];
+    },
+    async addEventPhoto(photo: EventPhoto): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('fotos_evento')
+        .insert([{ id: photo.id, url: photo.url, createdAt: photo.createdAt }]);
+      if (error) throw error;
     }
   };
 };
@@ -106,5 +108,7 @@ export const databaseService = {
   isConfigured: () => !getProvider().isLocal,
   getMembers: () => getProvider().getMembers(),
   addMember: (m: Member) => getProvider().addMember(m),
-  deleteMember: (id: string) => getProvider().deleteMember(id)
+  deleteMember: (id: string) => getProvider().deleteMember(id),
+  getEventPhotos: () => getProvider().getEventPhotos(),
+  addEventPhoto: (p: EventPhoto) => getProvider().addEventPhoto(p)
 };

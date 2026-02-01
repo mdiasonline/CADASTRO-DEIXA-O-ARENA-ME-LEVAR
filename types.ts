@@ -10,6 +10,12 @@ export interface Member {
   createdAt: number;
 }
 
+export interface EventPhoto {
+  id: string;
+  url: string; // Base64 or URL
+  createdAt: number;
+}
+
 export enum ViewMode {
   HOME = 'HOME',
   REGISTER = 'REGISTER',
