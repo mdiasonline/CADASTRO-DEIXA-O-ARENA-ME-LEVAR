@@ -14,5 +14,6 @@ export enum ViewMode {
   HOME = 'HOME',
   REGISTER = 'REGISTER',
   LIST = 'LIST',
-  STATISTICS = 'STATISTICS'
+  STATISTICS = 'STATISTICS',
+  PHOTOS = 'PHOTOS'
 }

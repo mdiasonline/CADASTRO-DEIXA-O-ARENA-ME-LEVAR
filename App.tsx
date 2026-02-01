@@ -20,7 +20,10 @@ import {
   Lock,
   X,
   BarChart3,
-  PieChart
+  PieChart,
+  Image as ImageIcon,
+  Download,
+  Share2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -36,7 +39,7 @@ const App: React.FC = () => {
   // Estados para acesso protegido
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'VIEW_PHOTOS' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   
   const defaultFormData = {
@@ -140,6 +143,12 @@ const App: React.FC = () => {
     setIsPasswordModalOpen(true);
   };
 
+  const initiateViewPhotos = () => {
+    setPasswordPurpose('VIEW_PHOTOS');
+    setPasswordInput('');
+    setIsPasswordModalOpen(true);
+  };
+
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
       if (passwordPurpose === 'DELETE') {
@@ -161,10 +170,50 @@ const App: React.FC = () => {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
         setPasswordInput('');
+      } else if (passwordPurpose === 'VIEW_PHOTOS') {
+        setView(ViewMode.PHOTOS);
+        setIsPasswordModalOpen(false);
+        setPasswordInput('');
       }
     } else {
       alert('SENHA INCORRETA! ACESSO NEGADO.');
       setPasswordInput('');
+    }
+  };
+
+  const handleDownloadPhoto = (m: Member) => {
+    if (!m.photo) return;
+    const link = document.createElement('a');
+    link.href = m.photo;
+    link.download = `foto_${m.nome.replace(/\s+/g, '_').toLowerCase()}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleSharePhoto = async (m: Member) => {
+    if (!m.photo) return;
+    
+    try {
+      // Tentar usar a Web Share API (Melhor para mobile)
+      const res = await fetch(m.photo);
+      const blob = await res.blob();
+      const file = new File([blob], `${m.nome}_carnaval.jpg`, { type: 'image/jpeg' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Folia 2026',
+          text: `Olha a foto do(a) ${m.nome} no ${m.bloco}! 🎉`,
+        });
+      } else {
+        // Fallback: Compartilhar apenas texto com link do WhatsApp
+        const text = encodeURIComponent(`Olha a foto de ${m.nome} no ${m.bloco}! (Baixe a foto no app para enviar o arquivo)`);
+        window.open(`https://wa.me/?text=${text}`, '_blank');
+      }
+    } catch (error) {
+      console.error("Erro ao compartilhar:", error);
+      alert("Não foi possível compartilhar diretamente. Tente baixar a foto primeiro.");
     }
   };
 
@@ -175,6 +224,10 @@ const App: React.FC = () => {
       return matchesSearch && matchesTipo;
     }), 
   [members, searchTerm, filterTipo]);
+
+  const membersWithPhotos = useMemo(() => 
+    filteredMembers.filter(m => m.photo),
+  [filteredMembers]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
@@ -259,7 +312,14 @@ const App: React.FC = () => {
               <h2 className="text-3xl font-arena text-[#C63D2F]">GERENCIAR</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Lista de Membros</p>
             </button>
-            <button onClick={initiateViewStats} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all md:col-span-2">
+            <button onClick={initiateViewPhotos} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]">
+                <ImageIcon size={40} className="text-[#2B4C7E]" />
+              </div>
+              <h2 className="text-3xl font-arena text-[#2B4C7E]">GALERIA</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Fotos dos Foliões</p>
+            </button>
+            <button onClick={initiateViewStats} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]">
                 <BarChart3 size={40} className="text-[#F9B115]" />
               </div>
@@ -392,9 +452,62 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {view === ViewMode.PHOTOS && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3 shadow-sm">
+                <Search className="text-[#2B4C7E]" />
+                <input placeholder="BUSCAR POR NOME..." className="w-full outline-none font-bold text-[#2B4C7E]" onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+
+            {membersWithPhotos.length === 0 ? (
+              <div className="text-center py-20 opacity-30">
+                <ImageIcon size={64} className="mx-auto mb-4" />
+                <p className="font-arena text-2xl uppercase">Nenhuma foto encontrada</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {membersWithPhotos.map(m => (
+                  <div key={m.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform">
+                    <div className="aspect-square w-full relative">
+                      <img src={m.photo} className="w-full h-full object-cover" alt={m.nome} />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                        <button 
+                          onClick={() => handleDownloadPhoto(m)}
+                          className="p-3 bg-white text-[#2B4C7E] rounded-full hover:bg-[#F9B115] transition-colors"
+                          title="Baixar Foto"
+                        >
+                          <Download size={24} />
+                        </button>
+                        <button 
+                          onClick={() => handleSharePhoto(m)}
+                          className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform shadow-lg"
+                          title="Enviar p/ WhatsApp"
+                        >
+                          <Share2 size={24} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-4 border-t-2 border-[#2B4C7E]">
+                      <h4 className="font-arena text-lg text-[#2B4C7E] truncate">{m.nome}</h4>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-[10px] font-black bg-[#F9B115] px-2 py-0.5 rounded uppercase">{m.bloco}</span>
+                        <div className="flex gap-2">
+                           <button onClick={() => handleDownloadPhoto(m)} className="sm:hidden p-1 text-[#2B4C7E]"><Download size={18} /></button>
+                           <button onClick={() => handleSharePhoto(m)} className="sm:hidden p-1 text-[#25D366]"><Share2 size={18} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {view === ViewMode.STATISTICS && (
           <div className="space-y-8 animate-fadeIn">
-            {/* Resumo Geral */}
             <div className="arena-card p-6 bg-white text-center">
               <div className="w-16 h-16 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-[#2B4C7E]">
                 <Users size={32} className="text-[#2B4C7E]" />
@@ -404,7 +517,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Gráfico de Blocos */}
               <div className="arena-card p-6 bg-white">
                 <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
                   <BarChart3 className="text-[#2B4C7E]" />
@@ -435,7 +547,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Gráfico de Cargos */}
               <div className="arena-card p-6 bg-white">
                 <div className="flex items-center gap-3 mb-6 border-b-2 border-gray-100 pb-3">
                   <PieChart className="text-[#C63D2F]" />
@@ -479,17 +590,14 @@ const App: React.FC = () => {
                 <Lock size={20} /> 
                 {passwordPurpose === 'DELETE' ? 'EXCLUSÃO RESTRITA' : 
                  passwordPurpose === 'VIEW_STATS' ? 'ESTATÍSTICAS RESTRITAS' : 
+                 passwordPurpose === 'VIEW_PHOTOS' ? 'GALERIA RESTRITA' :
                  'ACESSO RESTRITO'}
               </h3>
               <button onClick={() => setIsPasswordModalOpen(false)} className="hover:rotate-90 transition-transform"><X /></button>
             </div>
             <div className="p-8 space-y-4">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-center">
-                {passwordPurpose === 'DELETE' 
-                  ? 'Informe a senha de administrador para excluir este folião:' 
-                  : passwordPurpose === 'VIEW_STATS' 
-                  ? 'Informe a senha de administrador para ver os números:'
-                  : 'Informe a senha de administrador para gerenciar a lista:'}
+                Informe a senha de administrador para continuar:
               </p>
               <input 
                 type="password" 
@@ -532,7 +640,10 @@ const App: React.FC = () => {
             <UserPlus size={24} /> <span className="text-[10px] font-bold">CADASTRO</span>
           </button>
           <button onClick={() => { if(view !== ViewMode.LIST) initiateViewList(); }} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}>
-            <Users size={24} /> <span className="text-[10px] font-bold">FOLIÕES</span>
+            <Users size={24} /> <span className="text-[10px] font-bold">LISTA</span>
+          </button>
+          <button onClick={() => { if(view !== ViewMode.PHOTOS) initiateViewPhotos(); }} className={`flex flex-col items-center ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60'}`}>
+            <ImageIcon size={24} /> <span className="text-[10px] font-bold">GALERIA</span>
           </button>
           <button onClick={() => { if(view !== ViewMode.STATISTICS) initiateViewStats(); }} className={`flex flex-col items-center ${view === ViewMode.STATISTICS ? 'text-[#F9B115]' : 'opacity-60'}`}>
             <BarChart3 size={24} /> <span className="text-[10px] font-bold">STATS</span>
