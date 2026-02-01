@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
@@ -176,7 +175,7 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          const selfie = await compressImage(reader.result as string, 0.4, 400);
+          const selfie = await compressImage(reader.result as string, 0.7, 600);
           setFaceSearchRef(selfie);
           
           // Pegar as últimas 30 fotos para busca (limite do Gemini para evitar latência excessiva)
@@ -189,6 +188,7 @@ const App: React.FC = () => {
           }
         } catch (err) {
           console.error(err);
+          alert("Erro ao processar busca facial. Tente uma foto mais clara.");
         } finally {
           setIsFacialSearching(false);
         }
