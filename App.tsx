@@ -59,15 +59,14 @@ const App: React.FC = () => {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
 
-  // Função para comprimir imagem antes de salvar
   const compressImage = (base64Str: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200;
-        const MAX_HEIGHT = 1200;
+        const MAX_WIDTH = 1000; // Reduzi um pouco para garantir leveza
+        const MAX_HEIGHT = 1000;
         let width = img.width;
         let height = img.height;
 
@@ -87,8 +86,8 @@ const App: React.FC = () => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        // Reduz a qualidade para 0.7 (70%) para economizar espaço
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        // Qualidade 0.6 é ideal para armazenamento em banco
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
       };
     });
   };
@@ -157,12 +156,8 @@ const App: React.FC = () => {
           await databaseService.addEventPhoto(newPhoto);
           setEventPhotos(prev => [newPhoto, ...prev]);
         } catch (err: any) {
-          console.error("Erro no upload:", err);
-          if (err.name === 'QuotaExceededError') {
-            alert("Memória do navegador cheia! Tente apagar algumas fotos ou use o modo online.");
-          } else {
-            alert("Erro ao salvar foto no mural. Tente uma imagem menor.");
-          }
+          console.error("Erro no upload mural:", err);
+          alert("Erro ao salvar no banco. Verifique se a tabela 'fotos_evento' existe no Supabase.");
         } finally {
           setLoading(false);
           if (muralUploadRef.current) muralUploadRef.current.value = "";
@@ -175,43 +170,21 @@ const App: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
     const newMember: Member = {
       id: Math.random().toString(36).substring(7),
       ...formData,
       createdAt: Date.now()
     };
-
     try {
       await databaseService.addMember(newMember);
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      console.error("Erro ao salvar membro:", error);
-      alert("Erro ao salvar cadastro. Verifique sua conexão ou espaço disponível.");
+      alert("Erro ao salvar cadastro no banco.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
     }
-  };
-
-  const initiateRemoveMember = (id: string) => {
-    setMemberIdToDelete(id);
-    setPasswordPurpose('DELETE');
-    setPasswordInput('');
-    setIsPasswordModalOpen(true);
-  };
-
-  const initiateViewList = () => {
-    setPasswordPurpose('VIEW_LIST');
-    setPasswordInput('');
-    setIsPasswordModalOpen(true);
-  };
-
-  const initiateViewStats = () => {
-    setPasswordPurpose('VIEW_STATS');
-    setPasswordInput('');
-    setIsPasswordModalOpen(true);
   };
 
   const handleConfirmPassword = async () => {
@@ -221,9 +194,7 @@ const App: React.FC = () => {
           await databaseService.deleteMember(memberIdToDelete);
           setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
           setIsPasswordModalOpen(false);
-        } catch (e) {
-          alert("Erro ao excluir.");
-        }
+        } catch (e) { alert("Erro ao excluir."); }
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
         setIsPasswordModalOpen(false);
@@ -231,9 +202,7 @@ const App: React.FC = () => {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
       }
-    } else {
-      alert('SENHA INCORRETA!');
-    }
+    } else { alert('SENHA INCORRETA!'); }
     setPasswordInput('');
   };
 
@@ -252,18 +221,14 @@ const App: React.FC = () => {
     try {
       const res = await fetch(url);
       const blob = await res.blob();
-      const file = new File([blob], `folia_arena.jpg`, { type: 'image/jpeg' });
+      const file = new File([blob], `foto_folia.jpg`, { type: 'image/jpeg' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Carnaval 2026' });
       } else {
         window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval! 🎭')}`, '_blank');
       }
-    } catch (e) { alert("Não foi possível compartilhar. Tente baixar a foto primeiro."); }
+    } catch (e) { alert("Use o botão de Download."); }
   };
-
-  const filteredMembers = useMemo(() => 
-    members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase()) && (filterTipo === '' || m.tipo === filterTipo)), 
-  [members, searchTerm, filterTipo]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
@@ -298,30 +263,22 @@ const App: React.FC = () => {
         {view === ViewMode.HOME && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn mt-6">
             <button onClick={() => setView(ViewMode.REGISTER)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]">
-                <UserPlus size={40} className="text-[#2B4C7E]" />
-              </div>
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]"><UserPlus size={40} className="text-[#2B4C7E]" /></div>
               <h2 className="text-3xl font-arena text-[#2B4C7E]">NOVA INSCRIÇÃO</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Cadastro de Folião</p>
             </button>
             <button onClick={() => setView(ViewMode.PHOTOS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]">
-                <ImageIcon size={40} className="text-[#F9B115]" />
-              </div>
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]"><ImageIcon size={40} className="text-[#F9B115]" /></div>
               <h2 className="text-3xl font-arena text-[#F9B115]">MURAL DE FOTOS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
             </button>
-            <button onClick={initiateViewList} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]">
-                <Users size={40} className="text-[#C63D2F]" />
-              </div>
+            <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Users size={40} className="text-[#C63D2F]" /></div>
               <h2 className="text-3xl font-arena text-[#C63D2F]">LISTA PRIVADA</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Apenas com Senha</p>
             </button>
-            <button onClick={initiateViewStats} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400">
-                <BarChart3 size={40} className="text-gray-500" />
-              </div>
+            <button onClick={() => { setPasswordPurpose('VIEW_STATS'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400"><BarChart3 size={40} className="text-gray-500" /></div>
               <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados do Bloco</p>
             </button>
@@ -335,7 +292,7 @@ const App: React.FC = () => {
                <div className="p-10 text-center">
                  <Trophy size={60} className="mx-auto text-green-500 mb-4" />
                  <h3 className="text-2xl font-arena text-[#2B4C7E]">CADASTRO OK!</h3>
-                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">FAZER OUTRO</button>
+                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">NOVO CADASTRO</button>
                </div>
              ) : (
                <form onSubmit={handleSubmit} className="p-8 space-y-5">
@@ -344,8 +301,8 @@ const App: React.FC = () => {
                      {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-6 text-gray-200" />}
                    </div>
                    <div className="flex gap-2 mt-3">
-                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full" title="Câmera"><Camera size={18} /></button>
-                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full" title="Galeria"><Upload size={18} /></button>
+                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full"><Camera size={18} /></button>
+                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full"><Upload size={18} /></button>
                    </div>
                    <input type="file" ref={cameraInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
                    <input type="file" ref={galleryInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -370,25 +327,17 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
               <div>
                 <h2 className="text-3xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                <p className="text-[10px] font-black uppercase text-gray-400">Poste as fotos do seu bloco aqui!</p>
+                <p className="text-[10px] font-black uppercase text-gray-400">Fotos armazenadas no Banco</p>
               </div>
-              <button 
-                onClick={() => muralUploadRef.current?.click()} 
-                className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena"
-                disabled={loading}
-              >
+              <button onClick={() => muralUploadRef.current?.click()} className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
               </button>
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} />
             </div>
-
             {fetching ? (
               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
             ) : eventPhotos.length === 0 ? (
-              <div className="text-center py-20 opacity-30">
-                <ImageIcon size={64} className="mx-auto mb-4" />
-                <p className="font-arena text-2xl">MURAL VAZIO. SEJA O PRIMEIRO!</p>
-              </div>
+              <div className="text-center py-20 opacity-30"><ImageIcon size={64} className="mx-auto mb-4" /><p className="font-arena text-2xl uppercase">MURAL VAZIO</p></div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {eventPhotos.map(p => (
@@ -396,8 +345,8 @@ const App: React.FC = () => {
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full" title="Baixar"><Download size={24} /></button>
-                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full" title="Compartilhar"><Share2 size={24} /></button>
+                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full"><Download size={24} /></button>
+                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full"><Share2 size={24} /></button>
                       </div>
                     </div>
                   </div>
@@ -409,25 +358,23 @@ const App: React.FC = () => {
 
         {view === ViewMode.LIST && (
            <div className="space-y-6 animate-fadeIn">
-              <div className="flex gap-4">
-                <div className="flex-grow bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3">
-                  <Search className="text-[#2B4C7E]" />
-                  <input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} />
-                </div>
+              <div className="bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3">
+                <Search className="text-[#2B4C7E]" />
+                <input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} />
               </div>
               <div className="grid gap-4">
-                {filteredMembers.map(m => (
+                {members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase())).map(m => (
                   <div key={m.id} className="bg-white p-4 rounded-2xl border-2 border-[#2B4C7E] flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full border-2 border-[#2B4C7E] overflow-hidden shrink-0">
                       {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-2 text-gray-200" />}
                     </div>
                     <div className="flex-grow">
-                      <h4 className="font-arena text-lg leading-none truncate max-w-[150px] sm:max-w-none">{m.nome}</h4>
+                      <h4 className="font-arena text-lg leading-none truncate">{m.nome}</h4>
                       <span className="text-[9px] font-black uppercase text-[#F9B115]">{m.bloco}</span>
                     </div>
                     <div className="flex gap-2">
-                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
-                       <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-600 hover:text-white transition-all"><Trash2 size={16} /></button>
+                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full"><MessageCircle size={16} /></a>
+                       <button onClick={() => { setMemberIdToDelete(m.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="p-2 bg-red-100 text-red-600 rounded-full"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -437,13 +384,10 @@ const App: React.FC = () => {
 
         {view === ViewMode.STATISTICS && (
            <div className="space-y-8 animate-fadeIn">
-              <div className="arena-card p-6 text-center">
-                 <h2 className="text-6xl font-arena text-[#2B4C7E]">{stats.total}</h2>
-                 <p className="font-black uppercase text-xs text-gray-400">Total de Foliões</p>
-              </div>
+              <div className="arena-card p-6 text-center"><h2 className="text-6xl font-arena text-[#2B4C7E]">{stats.total}</h2><p className="font-black uppercase text-xs text-gray-400">Total Foliões</p></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="arena-card p-6 bg-white">
-                    <h3 className="font-arena text-xl mb-4 text-[#2B4C7E]">BLOCOS</h3>
+                    <h3 className="font-arena text-xl mb-4">BLOCOS</h3>
                     {stats.byBloco.map(([n, c]) => (
                       <div key={n} className="mb-3">
                         <div className="flex justify-between text-[10px] font-black mb-1"><span>{n}</span><span>{c}</span></div>
@@ -472,16 +416,8 @@ const App: React.FC = () => {
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
           <div className="arena-card w-full max-w-sm bg-white p-8">
-            <h3 className="font-arena text-xl mb-4 text-center">ÁREA RESTRITA</h3>
-            <input 
-              type="password" 
-              value={passwordInput} 
-              onChange={e => setPasswordInput(e.target.value)}
-              className={inputStyles}
-              placeholder="SENHA"
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()}
-            />
+            <h3 className="font-arena text-xl mb-4 text-center">ACESSO RESTRITO</h3>
+            <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-2 mt-4">
               <button onClick={() => setIsPasswordModalOpen(false)} className="flex-grow py-3 border-2 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg">Entrar</button>
@@ -490,16 +426,12 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <footer className="py-4 text-center text-[#2B4C7E]/40 text-[9px] font-black uppercase tracking-widest mt-auto">
-        Arena Carnaval 2026
-      </footer>
-
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
           <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center transition-colors ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Home size={24} /><span className="text-[8px] font-bold mt-1">INÍCIO</span></button>
           <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[8px] font-bold mt-1">CADASTRO</span></button>
           <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-colors ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold mt-1">MURAL</span></button>
-          <button onClick={initiateViewList} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
         </div>
       </nav>
 

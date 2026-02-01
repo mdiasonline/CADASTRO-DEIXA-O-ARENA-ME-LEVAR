@@ -2,11 +2,35 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Member, EventPhoto } from "../types";
 
+/* 
+  SQL PARA CRIAR AS TABELAS NO SUPABASE (Copie e cole no SQL Editor do Supabase):
+
+  CREATE TABLE membros (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    bloco TEXT,
+    tipo TEXT,
+    apto TEXT,
+    celular TEXT,
+    photo TEXT,
+    "createdAt" BIGINT
+  );
+
+  CREATE TABLE fotos_evento (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    "createdAt" BIGINT
+  );
+
+  -- Desative o RLS para testes ou crie políticas de acesso público:
+  ALTER TABLE membros DISABLE ROW LEVEL SECURITY;
+  ALTER TABLE fotos_evento DISABLE ROW LEVEL SECURITY;
+*/
+
 interface DBProvider {
   getMembers(): Promise<Member[]>;
   addMember(member: Member): Promise<void>;
   deleteMember(id: string): Promise<void>;
-  // Event Photos
   getEventPhotos(): Promise<EventPhoto[]>;
   addEventPhoto(photo: EventPhoto): Promise<void>;
   isLocal: boolean;
@@ -39,7 +63,7 @@ const localProvider: DBProvider = {
 
 const getEnv = (key: string): string => {
   try {
-    // @ts-ignore - Vite way
+    // @ts-ignore
     const env = import.meta.env;
     if (env) {
       const val = env[`VITE_${key}`] || env[key];
@@ -55,9 +79,7 @@ const getProvider = (): DBProvider => {
   const url = getEnv('SUPABASE_URL');
   const key = getEnv('SUPABASE_ANON_KEY');
 
-  if (!url || !key) {
-    return localProvider;
-  }
+  if (!url || !key) return localProvider;
 
   if (!supabaseInstance) {
     supabaseInstance = createClient(url, key);
@@ -70,7 +92,6 @@ const getProvider = (): DBProvider => {
         .from('membros')
         .select('*')
         .order('createdAt', { ascending: false });
-      
       if (error) throw error;
       return (data as Member[]) || [];
     },
@@ -82,7 +103,7 @@ const getProvider = (): DBProvider => {
     },
     async deleteMember(id: string): Promise<void> {
       const { error } = await supabaseInstance!
-        .from('id', id)
+        .from('membros')
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -92,13 +113,20 @@ const getProvider = (): DBProvider => {
         .from('fotos_evento')
         .select('*')
         .order('createdAt', { ascending: false });
-      if (error) return [];
+      if (error) {
+        console.error("Erro Supabase Photos:", error);
+        return [];
+      }
       return (data as EventPhoto[]) || [];
     },
     async addEventPhoto(photo: EventPhoto): Promise<void> {
       const { error } = await supabaseInstance!
         .from('fotos_evento')
-        .insert([{ id: photo.id, url: photo.url, createdAt: photo.createdAt }]);
+        .insert([{ 
+          id: photo.id, 
+          url: photo.url, 
+          createdAt: photo.createdAt 
+        }]);
       if (error) throw error;
     }
   };
