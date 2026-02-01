@@ -39,7 +39,6 @@ const App: React.FC = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
   
-  // Estados para acesso protegido
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | null>(null);
@@ -60,6 +59,40 @@ const App: React.FC = () => {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
 
+  // Função para comprimir imagem antes de salvar
+  const compressImage = (base64Str: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        // Reduz a qualidade para 0.7 (70%) para economizar espaço
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+    });
+  };
+
   const loadData = async () => {
     setFetching(true);
     setSyncStatus('syncing');
@@ -69,8 +102,8 @@ const App: React.FC = () => {
         databaseService.getMembers(),
         databaseService.getEventPhotos()
       ]);
-      setMembers(membersData);
-      setEventPhotos(photosData);
+      setMembers(membersData || []);
+      setEventPhotos(photosData || []);
       setSyncStatus(isOnline ? 'synced' : 'local');
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
@@ -100,8 +133,9 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, photo: reader.result as string }));
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result as string);
+        setFormData(prev => ({ ...prev, photo: compressed }));
       };
       reader.readAsDataURL(file);
     }
@@ -113,18 +147,25 @@ const App: React.FC = () => {
       setLoading(true);
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const newPhoto: EventPhoto = {
-          id: Math.random().toString(36).substring(7),
-          url: reader.result as string,
-          createdAt: Date.now()
-        };
         try {
+          const compressed = await compressImage(reader.result as string);
+          const newPhoto: EventPhoto = {
+            id: Math.random().toString(36).substring(7),
+            url: compressed,
+            createdAt: Date.now()
+          };
           await databaseService.addEventPhoto(newPhoto);
           setEventPhotos(prev => [newPhoto, ...prev]);
-        } catch (err) {
-          alert("Erro ao salvar foto no mural.");
+        } catch (err: any) {
+          console.error("Erro no upload:", err);
+          if (err.name === 'QuotaExceededError') {
+            alert("Memória do navegador cheia! Tente apagar algumas fotos ou use o modo online.");
+          } else {
+            alert("Erro ao salvar foto no mural. Tente uma imagem menor.");
+          }
         } finally {
           setLoading(false);
+          if (muralUploadRef.current) muralUploadRef.current.value = "";
         }
       };
       reader.readAsDataURL(file);
@@ -146,7 +187,8 @@ const App: React.FC = () => {
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      alert(`Erro ao salvar membro.`);
+      console.error("Erro ao salvar membro:", error);
+      alert("Erro ao salvar cadastro. Verifique sua conexão ou espaço disponível.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -175,9 +217,13 @@ const App: React.FC = () => {
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
       if (passwordPurpose === 'DELETE' && memberIdToDelete) {
-        await databaseService.deleteMember(memberIdToDelete);
-        setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
-        setIsPasswordModalOpen(false);
+        try {
+          await databaseService.deleteMember(memberIdToDelete);
+          setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
+          setIsPasswordModalOpen(false);
+        } catch (e) {
+          alert("Erro ao excluir.");
+        }
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
         setIsPasswordModalOpen(false);
@@ -210,9 +256,9 @@ const App: React.FC = () => {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Carnaval 2026' });
       } else {
-        window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval!')}`, '_blank');
+        window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval! 🎭')}`, '_blank');
       }
-    } catch (e) { alert("Download a foto primeiro para compartilhar."); }
+    } catch (e) { alert("Não foi possível compartilhar. Tente baixar a foto primeiro."); }
   };
 
   const filteredMembers = useMemo(() => 
@@ -289,7 +335,7 @@ const App: React.FC = () => {
                <div className="p-10 text-center">
                  <Trophy size={60} className="mx-auto text-green-500 mb-4" />
                  <h3 className="text-2xl font-arena text-[#2B4C7E]">CADASTRO OK!</h3>
-                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">OUTRO</button>
+                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">FAZER OUTRO</button>
                </div>
              ) : (
                <form onSubmit={handleSubmit} className="p-8 space-y-5">
@@ -298,8 +344,8 @@ const App: React.FC = () => {
                      {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-6 text-gray-200" />}
                    </div>
                    <div className="flex gap-2 mt-3">
-                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full"><Camera size={18} /></button>
-                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full"><Upload size={18} /></button>
+                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full" title="Câmera"><Camera size={18} /></button>
+                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full" title="Galeria"><Upload size={18} /></button>
                    </div>
                    <input type="file" ref={cameraInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
                    <input type="file" ref={galleryInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -329,13 +375,16 @@ const App: React.FC = () => {
               <button 
                 onClick={() => muralUploadRef.current?.click()} 
                 className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena"
+                disabled={loading}
               >
                 {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
               </button>
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} />
             </div>
 
-            {eventPhotos.length === 0 ? (
+            {fetching ? (
+              <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
+            ) : eventPhotos.length === 0 ? (
               <div className="text-center py-20 opacity-30">
                 <ImageIcon size={64} className="mx-auto mb-4" />
                 <p className="font-arena text-2xl">MURAL VAZIO. SEJA O PRIMEIRO!</p>
@@ -345,10 +394,10 @@ const App: React.FC = () => {
                 {eventPhotos.map(p => (
                   <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform">
                     <div className="aspect-square relative">
-                      <img src={p.url} className="w-full h-full object-cover" />
+                      <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full"><Download size={24} /></button>
-                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full"><Share2 size={24} /></button>
+                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full" title="Baixar"><Download size={24} /></button>
+                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full" title="Compartilhar"><Share2 size={24} /></button>
                       </div>
                     </div>
                   </div>
@@ -369,16 +418,16 @@ const App: React.FC = () => {
               <div className="grid gap-4">
                 {filteredMembers.map(m => (
                   <div key={m.id} className="bg-white p-4 rounded-2xl border-2 border-[#2B4C7E] flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full border-2 border-[#2B4C7E] overflow-hidden">
+                    <div className="w-12 h-12 rounded-full border-2 border-[#2B4C7E] overflow-hidden shrink-0">
                       {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-2 text-gray-200" />}
                     </div>
                     <div className="flex-grow">
-                      <h4 className="font-arena text-lg leading-none">{m.nome}</h4>
+                      <h4 className="font-arena text-lg leading-none truncate max-w-[150px] sm:max-w-none">{m.nome}</h4>
                       <span className="text-[9px] font-black uppercase text-[#F9B115]">{m.bloco}</span>
                     </div>
                     <div className="flex gap-2">
-                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full"><MessageCircle size={16} /></a>
-                       <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-100 text-red-600 rounded-full"><Trash2 size={16} /></button>
+                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full hover:scale-110 transition-transform"><MessageCircle size={16} /></a>
+                       <button onClick={() => initiateRemoveMember(m.id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-600 hover:text-white transition-all"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -393,12 +442,25 @@ const App: React.FC = () => {
                  <p className="font-black uppercase text-xs text-gray-400">Total de Foliões</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div className="arena-card p-6">
-                    <h3 className="font-arena text-xl mb-4">BLOCOS</h3>
+                 <div className="arena-card p-6 bg-white">
+                    <h3 className="font-arena text-xl mb-4 text-[#2B4C7E]">BLOCOS</h3>
                     {stats.byBloco.map(([n, c]) => (
-                      <div key={n} className="mb-2">
-                        <div className="flex justify-between text-[10px] font-black"><span>{n}</span><span>{c}</span></div>
-                        <div className="h-2 bg-gray-100 rounded-full"><div className="h-full bg-[#2B4C7E] rounded-full" style={{width: `${(c/stats.total)*100}%`}}></div></div>
+                      <div key={n} className="mb-3">
+                        <div className="flex justify-between text-[10px] font-black mb-1"><span>{n}</span><span>{c}</span></div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                          <div className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+                        </div>
+                      </div>
+                    ))}
+                 </div>
+                 <div className="arena-card p-6 bg-white">
+                    <h3 className="font-arena text-xl mb-4 text-[#C63D2F]">CARGOS</h3>
+                    {stats.byCargo.map(([n, c]) => (
+                      <div key={n} className="mb-3">
+                        <div className="flex justify-between text-[10px] font-black mb-1"><span>{n}</span><span>{c}</span></div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                          <div className="h-full bg-[#C63D2F] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+                        </div>
                       </div>
                     ))}
                  </div>
@@ -407,7 +469,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modal de Senha */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
           <div className="arena-card w-full max-w-sm bg-white p-8">
@@ -422,19 +483,23 @@ const App: React.FC = () => {
               onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()}
             />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setIsPasswordModalOpen(false)} className="flex-grow py-2 border-2 rounded-xl font-bold uppercase text-xs">Sair</button>
-              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-2 rounded-xl font-arena">Entrar</button>
+              <button onClick={() => setIsPasswordModalOpen(false)} className="flex-grow py-3 border-2 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg">Entrar</button>
             </div>
           </div>
         </div>
       )}
 
+      <footer className="py-4 text-center text-[#2B4C7E]/40 text-[9px] font-black uppercase tracking-widest mt-auto">
+        Arena Carnaval 2026
+      </footer>
+
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60'}`}><Home size={24} /><span className="text-[8px] font-bold">INÍCIO</span></button>
-          <button onClick={() => setView(ViewMode.REGISTER)} className={`flex flex-col items-center ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60'}`}><UserPlus size={24} /><span className="text-[8px] font-bold">CADASTRO</span></button>
-          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold">MURAL</span></button>
-          <button onClick={initiateViewList} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60'}`}><Users size={24} /><span className="text-[8px] font-bold">LISTA</span></button>
+          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center transition-colors ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Home size={24} /><span className="text-[8px] font-bold mt-1">INÍCIO</span></button>
+          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[8px] font-bold mt-1">CADASTRO</span></button>
+          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-colors ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold mt-1">MURAL</span></button>
+          <button onClick={initiateViewList} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
         </div>
       </nav>
 
@@ -443,6 +508,7 @@ const App: React.FC = () => {
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
         .animate-slideUp { animation: slideUp 0.4s ease-out; }
+        .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; }
       `}} />
     </div>
   );
