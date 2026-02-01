@@ -23,7 +23,8 @@ import {
   PieChart,
   Image as ImageIcon,
   Download,
-  Share2
+  Share2,
+  Upload
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -53,7 +54,8 @@ const App: React.FC = () => {
 
   const [formData, setFormData] = useState(defaultFormData);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const loadMembers = async () => {
     setFetching(true);
@@ -195,7 +197,6 @@ const App: React.FC = () => {
     if (!m.photo) return;
     
     try {
-      // Tentar usar a Web Share API (Melhor para mobile)
       const res = await fetch(m.photo);
       const blob = await res.blob();
       const file = new File([blob], `${m.nome}_carnaval.jpg`, { type: 'image/jpeg' });
@@ -207,7 +208,6 @@ const App: React.FC = () => {
           text: `Olha a foto do(a) ${m.nome} no ${m.bloco}! 🎉`,
         });
       } else {
-        // Fallback: Compartilhar apenas texto com link do WhatsApp
         const text = encodeURIComponent(`Olha a foto de ${m.nome} no ${m.bloco}! (Baixe a foto no app para enviar o arquivo)`);
         window.open(`https://wa.me/?text=${text}`, '_blank');
       }
@@ -347,16 +347,52 @@ const App: React.FC = () => {
               <form onSubmit={handleSubmit} className="p-8 space-y-5">
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative group">
-                    <div className="w-28 h-28 rounded-full border-4 border-[#2B4C7E] bg-gray-50 flex items-center justify-center overflow-hidden">
+                    <div className="w-32 h-32 rounded-full border-4 border-[#2B4C7E] bg-gray-50 flex items-center justify-center overflow-hidden">
                       {formData.photo ? (
                         <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
                       ) : (
-                        <User size={40} className="text-gray-300" />
+                        <User size={48} className="text-gray-300" />
                       )}
                     </div>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute bottom-0 right-0 bg-[#2B4C7E] text-white p-2 rounded-full shadow-lg hover:bg-[#C63D2F] transition-colors"><Camera size={18} /></button>
+                    <div className="absolute -bottom-2 -right-2 flex gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => cameraInputRef.current?.click()} 
+                        className="bg-[#2B4C7E] text-white p-3 rounded-full shadow-lg hover:bg-[#C63D2F] transition-colors border-2 border-white"
+                        title="Tirar Foto"
+                      >
+                        <Camera size={20} />
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => galleryInputRef.current?.click()} 
+                        className="bg-[#F9B115] text-[#2B4C7E] p-3 rounded-full shadow-lg hover:bg-white transition-colors border-2 border-white"
+                        title="Enviar da Galeria"
+                      >
+                        <Upload size={20} />
+                      </button>
+                    </div>
                   </div>
-                  <input type="file" ref={fileInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sua foto de Folião</p>
+                  
+                  {/* Input oculto para Câmera */}
+                  <input 
+                    type="file" 
+                    ref={cameraInputRef} 
+                    accept="image/*" 
+                    capture="user" 
+                    className="hidden" 
+                    onChange={handleFileChange} 
+                  />
+                  
+                  {/* Input oculto para Galeria/Upload */}
+                  <input 
+                    type="file" 
+                    ref={galleryInputRef} 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleFileChange} 
+                  />
                 </div>
 
                 <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME COMPLETO" />
