@@ -167,7 +167,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Lógica da Busca Facial
+  // Lógica da Busca Facial corrigida e otimizada
   const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventPhotos.length > 0) {
@@ -175,20 +175,28 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          const selfie = await compressImage(reader.result as string, 0.7, 600);
+          // Otimizamos para 300px: resolução suficiente para a IA, mas leve para a API
+          const selfie = await compressImage(reader.result as string, 0.5, 300);
           setFaceSearchRef(selfie);
           
-          // Pegar as últimas 30 fotos para busca (limite do Gemini para evitar latência excessiva)
-          const targets = eventPhotos.slice(0, 30).map(p => ({ id: p.id, url: p.url }));
+          // Pegar as últimas 20 fotos para busca (equilíbrio entre cobertura e sucesso da API)
+          const targetPhotos = eventPhotos.slice(0, 20);
+          
+          // Comprimimos as fotos do mural também para o envio
+          const targets = await Promise.all(targetPhotos.map(async p => ({
+            id: p.id,
+            url: await compressImage(p.url, 0.4, 300)
+          })));
+
           const matches = await findFaceMatches(selfie, targets);
           
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma foto encontrada com seu rosto no mural recente.");
+            alert("Nenhuma foto encontrada no mural recente. Tente outra selfie ou mude o ângulo.");
           }
         } catch (err) {
-          console.error(err);
-          alert("Erro ao processar busca facial. Tente uma foto mais clara.");
+          console.error("Erro na busca facial:", err);
+          alert("Ocorreu um erro técnico na busca. Verifique sua conexão e tente novamente com uma foto mais nítida.");
         } finally {
           setIsFacialSearching(false);
         }
