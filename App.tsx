@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
+import { findFaceMatches } from './services/geminiService';
 import { 
   Users, 
   UserPlus, 
@@ -24,7 +26,9 @@ import {
   Download,
   Share2,
   Upload,
-  PlusCircle
+  PlusCircle,
+  ScanFace,
+  RefreshCcw
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -34,9 +38,12 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterTipo, setFilterTipo] = useState('');
   const [isRegistered, setIsRegistered] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
+  
+  // Estados para Busca Facial
+  const [faceSearchRef, setFaceSearchRef] = useState<string | null>(null);
+  const [matchedPhotoIds, setMatchedPhotoIds] = useState<string[] | null>(null);
+  const [isFacialSearching, setIsFacialSearching] = useState(false);
   
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -57,54 +64,40 @@ const App: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
+  const faceSearchInputRef = useRef<HTMLInputElement>(null);
 
-  const compressImage = (base64Str: string): Promise<string> => {
+  const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1000;
-        const MAX_HEIGHT = 1000;
         let width = img.width;
         let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
         }
-
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.6));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
     });
   };
 
   const loadData = async () => {
     setFetching(true);
-    setSyncStatus('syncing');
     try {
-      const isOnline = databaseService.isConfigured();
       const [membersData, photosData] = await Promise.all([
         databaseService.getMembers(),
         databaseService.getEventPhotos()
       ]);
       setMembers(membersData || []);
       setEventPhotos(photosData || []);
-      setSyncStatus(isOnline ? 'synced' : 'local');
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
-      setSyncStatus('local');
     } finally {
       setFetching(false);
     }
@@ -142,7 +135,6 @@ const App: React.FC = () => {
     const files = e.target.files;
     if (files && files.length > 0) {
       setLoading(true);
-      // Explicitly cast to File[] to avoid 'unknown' type inference which causes line 155 error
       const fileList = Array.from(files) as File[];
       const uploadedPhotos: EventPhoto[] = [];
 
@@ -155,7 +147,7 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
-          const compressed = await compressImage(base64);
+          const compressed = await compressImage(base64, 0.5, 1000);
           const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
             url: compressed,
@@ -168,12 +160,46 @@ const App: React.FC = () => {
         setEventPhotos(prev => [...uploadedPhotos, ...prev]);
       } catch (err: any) {
         console.error("Erro no upload mural:", err);
-        alert("Ocorreu um erro ao processar uma ou mais fotos. Verifique a tabela 'fotos_evento'.");
+        alert("Erro ao processar fotos.");
       } finally {
         setLoading(false);
         if (muralUploadRef.current) muralUploadRef.current.value = "";
       }
     }
+  };
+
+  // Lógica da Busca Facial
+  const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && eventPhotos.length > 0) {
+      setIsFacialSearching(true);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const selfie = await compressImage(reader.result as string, 0.4, 400);
+          setFaceSearchRef(selfie);
+          
+          // Pegar as últimas 30 fotos para busca (limite do Gemini para evitar latência excessiva)
+          const targets = eventPhotos.slice(0, 30).map(p => ({ id: p.id, url: p.url }));
+          const matches = await findFaceMatches(selfie, targets);
+          
+          setMatchedPhotoIds(matches);
+          if (matches.length === 0) {
+            alert("Nenhuma foto encontrada com seu rosto no mural recente.");
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsFacialSearching(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const clearFaceFilter = () => {
+    setMatchedPhotoIds(null);
+    setFaceSearchRef(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,7 +215,7 @@ const App: React.FC = () => {
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      alert("Erro ao salvar cadastro no banco.");
+      alert("Erro ao salvar cadastro.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -238,6 +264,11 @@ const App: React.FC = () => {
       }
     } catch (e) { alert("Use o botão de Download."); }
   };
+
+  const filteredMuralPhotos = useMemo(() => {
+    if (matchedPhotoIds === null) return eventPhotos;
+    return eventPhotos.filter(p => matchedPhotoIds.includes(p.id));
+  }, [eventPhotos, matchedPhotoIds]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
@@ -333,24 +364,56 @@ const App: React.FC = () => {
 
         {view === ViewMode.PHOTOS && (
           <div className="space-y-8 animate-fadeIn">
-            <div className="flex justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
-              <div>
-                <h2 className="text-3xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                <p className="text-[10px] font-black uppercase text-gray-400">Suporta upload de múltiplas fotos</p>
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
+                    {faceSearchRef ? <img src={faceSearchRef} className="w-full h-full object-cover" /> : <ScanFace className="text-[#2B4C7E]" size={32} />}
+                  </div>
+                  {isFacialSearching && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><Loader2 className="animate-spin text-[#2B4C7E]" size={20} /></div>}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
+                  <p className="text-[10px] font-black uppercase text-gray-400">Encontre-se no mural usando IA</p>
+                </div>
               </div>
-              <button onClick={() => muralUploadRef.current?.click()} className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena" disabled={loading}>
-                {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
-              </button>
+              <div className="flex gap-2 w-full md:w-auto">
+                {matchedPhotoIds ? (
+                   <button onClick={clearFaceFilter} className="flex-grow md:flex-none p-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
+                     <RefreshCcw size={16} /> Ver Tudo
+                   </button>
+                ) : (
+                  <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
+                    <ScanFace size={20} /> Me Localizar
+                  </button>
+                )}
+                <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
+                  {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
+                </button>
+              </div>
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
+              <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
+
+            {matchedPhotoIds && (
+              <div className="bg-[#2B4C7E] text-white p-4 rounded-2xl flex items-center justify-between animate-fadeIn">
+                <span className="font-arena text-sm">Mostrando {filteredMuralPhotos.length} fotos encontradas para seu rosto</span>
+                <X size={20} className="cursor-pointer" onClick={clearFaceFilter} />
+              </div>
+            )}
+
             {fetching ? (
               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
-            ) : eventPhotos.length === 0 ? (
-              <div className="text-center py-20 opacity-30"><ImageIcon size={64} className="mx-auto mb-4" /><p className="font-arena text-2xl uppercase">MURAL VAZIO</p></div>
+            ) : filteredMuralPhotos.length === 0 ? (
+              <div className="text-center py-20 opacity-30">
+                <ImageIcon size={64} className="mx-auto mb-4" />
+                <p className="font-arena text-2xl uppercase">{matchedPhotoIds ? "Nenhuma correspondência encontrada" : "MURAL VAZIO"}</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {eventPhotos.map(p => (
-                  <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform">
+                {filteredMuralPhotos.map(p => (
+                  <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative">
+                    {matchedPhotoIds && <div className="absolute top-2 left-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
