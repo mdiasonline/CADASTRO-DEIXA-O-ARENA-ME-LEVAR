@@ -28,7 +28,9 @@ import {
   Upload,
   PlusCircle,
   ScanFace,
-  RefreshCcw
+  RefreshCcw,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -44,10 +46,14 @@ const App: React.FC = () => {
   const [faceSearchRef, setFaceSearchRef] = useState<string | null>(null);
   const [matchedPhotoIds, setMatchedPhotoIds] = useState<string[] | null>(null);
   const [isFacialSearching, setIsFacialSearching] = useState(false);
+
+  // Estados para Seleção
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   
@@ -205,6 +211,12 @@ const App: React.FC = () => {
     setFaceSearchRef(null);
   };
 
+  const togglePhotoSelection = (id: string) => {
+    setSelectedPhotoIds(prev => 
+      prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -239,6 +251,18 @@ const App: React.FC = () => {
           setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete));
           setIsPasswordModalOpen(false);
         } catch (e) { alert("Erro ao excluir foto."); }
+      } else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) {
+        try {
+          setLoading(true);
+          for (const id of selectedPhotoIds) {
+            await databaseService.deleteEventPhoto(id);
+          }
+          setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id)));
+          setSelectedPhotoIds([]);
+          setIsSelectionMode(false);
+          setIsPasswordModalOpen(false);
+        } catch (e) { alert("Erro ao excluir fotos selecionadas."); }
+        finally { setLoading(false); }
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
         setIsPasswordModalOpen(false);
@@ -260,6 +284,16 @@ const App: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadSelected = () => {
+    selectedPhotoIds.forEach((id, index) => {
+      const photo = eventPhotos.find(p => p.id === id);
+      if (photo) {
+        // Pequeno delay entre downloads para não sobrecarregar o browser
+        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 300);
+      }
+    });
   };
 
   const handleSharePhoto = async (url?: string) => {
@@ -374,7 +408,7 @@ const App: React.FC = () => {
         )}
 
         {view === ViewMode.PHOTOS && (
-          <div className="space-y-8 animate-fadeIn">
+          <div className="space-y-8 animate-fadeIn pb-24">
             <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
               <div className="flex items-center gap-4">
                 <div className="relative">
@@ -388,19 +422,34 @@ const App: React.FC = () => {
                   <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
                 </div>
               </div>
-              <div className="flex gap-2 w-full md:w-auto">
-                {matchedPhotoIds ? (
-                   <button onClick={clearFaceFilter} className="flex-grow md:flex-none p-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
-                     <RefreshCcw size={16} /> Ver Tudo
-                   </button>
-                ) : (
-                  <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
-                    <ScanFace size={20} /> Me Localizar
-                  </button>
-                )}
-                <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
-                  {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                <button 
+                  onClick={() => {
+                    setIsSelectionMode(!isSelectionMode);
+                    setSelectedPhotoIds([]);
+                  }} 
+                  className={`flex-grow md:flex-none p-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 transition-all ${isSelectionMode ? 'bg-[#2B4C7E] text-white border-[#2B4C7E]' : 'bg-white text-[#2B4C7E] border-[#2B4C7E]'}`}
+                >
+                  {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
+                  {isSelectionMode ? 'Cancelar' : 'Selecionar'}
                 </button>
+                
+                {!isSelectionMode && (
+                  <>
+                    {matchedPhotoIds ? (
+                      <button onClick={clearFaceFilter} className="flex-grow md:flex-none p-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
+                        <RefreshCcw size={16} /> Ver Tudo
+                      </button>
+                    ) : (
+                      <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
+                        <ScanFace size={20} /> Me Localizar
+                      </button>
+                    )}
+                    <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
+                      {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
+                    </button>
+                  </>
+                )}
               </div>
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
               <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
@@ -423,25 +472,69 @@ const App: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {filteredMuralPhotos.map(p => (
-                  <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative">
-                    {matchedPhotoIds && <div className="absolute top-2 left-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
+                  <div 
+                    key={p.id} 
+                    onClick={() => isSelectionMode && togglePhotoSelection(p.id)}
+                    className={`arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative cursor-pointer ${isSelectionMode && selectedPhotoIds.includes(p.id) ? 'border-[#F9B115] ring-4 ring-[#F9B115]/30' : ''}`}
+                  >
+                    {isSelectionMode && (
+                      <div className="absolute top-3 left-3 z-30">
+                        {selectedPhotoIds.includes(p.id) ? (
+                          <div className="bg-[#F9B115] p-1 rounded-lg text-[#2B4C7E] border-2 border-[#2B4C7E] shadow-md animate-fadeIn">
+                            <CheckSquare size={24} />
+                          </div>
+                        ) : (
+                          <div className="bg-white/80 backdrop-blur-sm p-1 rounded-lg text-gray-400 border-2 border-gray-300 shadow-md">
+                            <Square size={24} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {matchedPhotoIds && <div className="absolute top-2 right-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
-                        <div className="flex gap-4">
-                          <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full hover:scale-110 transition-transform"><Download size={24} /></button>
-                          <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform"><Share2 size={24} /></button>
+                      {!isSelectionMode && (
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
+                          <div className="flex gap-4">
+                            <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-3 bg-white text-[#2B4C7E] rounded-full hover:scale-110 transition-transform"><Download size={24} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleSharePhoto(p.url); }} className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform"><Share2 size={24} /></button>
+                          </div>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} 
+                            className="p-3 bg-[#C63D2F] text-white rounded-full hover:scale-110 transition-transform"
+                          >
+                            <Trash2 size={24} />
+                          </button>
                         </div>
-                        <button 
-                          onClick={() => { setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} 
-                          className="p-3 bg-[#C63D2F] text-white rounded-full hover:scale-110 transition-transform"
-                        >
-                          <Trash2 size={24} />
-                        </button>
-                      </div>
+                      )}
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Barra de Ações Selecionadas */}
+            {isSelectionMode && selectedPhotoIds.length > 0 && (
+              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-lg bg-white border-4 border-[#2B4C7E] rounded-3xl shadow-2xl p-4 flex items-center justify-between animate-slideUp">
+                <div className="flex flex-col">
+                  <span className="font-arena text-[#2B4C7E] text-lg">{selectedPhotoIds.length} FOTOS</span>
+                  <span className="text-[8px] font-black uppercase text-gray-400">Selecionadas</span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleDownloadSelected}
+                    className="p-3 bg-[#F9B115] text-[#2B4C7E] rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform"
+                  >
+                    <Download size={18} /> Baixar
+                  </button>
+                  <button 
+                    onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsPasswordModalOpen(true); }}
+                    className="p-3 bg-[#C63D2F] text-white rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform"
+                  >
+                    <Trash2 size={18} /> Apagar
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -509,7 +602,7 @@ const App: React.FC = () => {
           <div className="arena-card w-full max-w-sm bg-white p-8">
             <h3 className="font-arena text-xl mb-4 text-center">ACESSO RESTRITO</h3>
             <p className="text-[10px] font-bold text-gray-400 text-center mb-4 uppercase">
-              {passwordPurpose === 'DELETE_PHOTO' ? 'Confirme a senha para excluir a foto' : 'Digite a senha de administrador'}
+              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? 'Confirme a senha para excluir as fotos' : 'Digite a senha de administrador'}
             </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-2 mt-4">
@@ -522,10 +615,10 @@ const App: React.FC = () => {
 
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center transition-colors ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Home size={24} /><span className="text-[8px] font-bold mt-1">INÍCIO</span></button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[8px] font-bold mt-1">CADASTRO</span></button>
+          <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Home size={24} /><span className="text-[8px] font-bold mt-1">INÍCIO</span></button>
+          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[8px] font-bold mt-1">CADASTRO</span></button>
           <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-colors ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold mt-1">MURAL</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
         </div>
       </nav>
 
