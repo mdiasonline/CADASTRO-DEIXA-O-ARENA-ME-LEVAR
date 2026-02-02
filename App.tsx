@@ -27,9 +27,7 @@ import {
   Upload,
   PlusCircle,
   ScanFace,
-  RefreshCcw,
-  Database,
-  CheckCircle2
+  RefreshCcw
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -67,9 +65,7 @@ const App: React.FC = () => {
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
 
-  const isCloud = databaseService.isConfigured();
-
-  const compressImage = (base64Str: string, quality = 0.5, maxWidth = 500): Promise<string> => {
+  const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
@@ -127,8 +123,7 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        // Compressão agressiva para o folião para garantir persistência
-        const compressed = await compressImage(reader.result as string, 0.5, 400);
+        const compressed = await compressImage(reader.result as string);
         setFormData(prev => ({ ...prev, photo: compressed }));
       };
       reader.readAsDataURL(file);
@@ -140,7 +135,7 @@ const App: React.FC = () => {
     if (files && files.length > 0) {
       setLoading(true);
       const fileList = Array.from(files) as File[];
-      const photosToSave: EventPhoto[] = [];
+      const uploadedPhotos: EventPhoto[] = [];
 
       try {
         for (const file of fileList) {
@@ -151,20 +146,20 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
-          const compressed = await compressImage(base64, 0.5, 500);
-          
-          photosToSave.push({
+          const compressed = await compressImage(base64, 0.5, 1000);
+          const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
             url: compressed,
             createdAt: Date.now()
-          });
+          };
+          
+          await databaseService.addEventPhoto(newPhoto);
+          uploadedPhotos.push(newPhoto);
         }
-        
-        await databaseService.addEventPhotos(photosToSave);
-        setEventPhotos(prev => [...photosToSave, ...prev]);
-        
+        setEventPhotos(prev => [...uploadedPhotos, ...prev]);
       } catch (err: any) {
-        alert(err.message || "Erro ao salvar fotos.");
+        console.error("Erro no upload mural:", err);
+        alert("Erro ao processar fotos.");
       } finally {
         setLoading(false);
         if (muralUploadRef.current) muralUploadRef.current.value = "";
@@ -172,6 +167,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Lógica da Busca Facial corrigida e otimizada
   const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventPhotos.length > 0) {
@@ -179,23 +175,28 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          const selfie = await compressImage(reader.result as string, 0.7, 320);
+          // Otimizamos para 256px: resolução leve mas suficiente para o Gemini Pro
+          const selfie = await compressImage(reader.result as string, 0.6, 256);
           setFaceSearchRef(selfie);
           
-          const targetPhotos = eventPhotos.slice(0, 10);
+          // Reduzimos o lote para 12 fotos para evitar erros de payload na API
+          const targetPhotos = eventPhotos.slice(0, 12);
+          
+          // Comprimimos as fotos do mural também
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
-            url: await compressImage(p.url, 0.6, 320)
+            url: await compressImage(p.url, 0.5, 256)
           })));
 
           const matches = await findFaceMatches(selfie, targets);
           
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma correspondência encontrada nas fotos recentes.");
+            alert("Nenhuma foto encontrada no mural recente. Experimente uma selfie com melhor iluminação.");
           }
-        } catch (err: any) {
-          alert(err.message || "Erro na busca.");
+        } catch (err) {
+          console.error("Erro na busca facial:", err);
+          alert("Ocorreu um erro na comunicação com a IA. Tente novamente em instantes com uma foto mais nítida.");
         } finally {
           setIsFacialSearching(false);
         }
@@ -218,24 +219,11 @@ const App: React.FC = () => {
       createdAt: Date.now()
     };
     try {
-      // Salva o membro no banco
       await databaseService.addMember(newMember);
-      
-      // Se houver foto, salva também no Mural automaticamente para garantir que apareça lá
-      if (newMember.photo) {
-        const photoForMural: EventPhoto = {
-          id: `membro_${newMember.id}`,
-          url: newMember.photo,
-          createdAt: Date.now()
-        };
-        await databaseService.addEventPhotos([photoForMural]);
-        setEventPhotos(prev => [photoForMural, ...prev]);
-      }
-      
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      alert("Erro ao salvar cadastro. O banco pode estar cheio.");
+      alert("Erro ao salvar cadastro.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -350,9 +338,8 @@ const App: React.FC = () => {
              <div className="bg-[#2B4C7E] p-4 text-center text-white"><h2 className="text-2xl font-arena">INSCRIÇÃO</h2></div>
              {isRegistered ? (
                <div className="p-10 text-center">
-                 <CheckCircle2 size={60} className="mx-auto text-green-500 mb-4" />
-                 <h3 className="text-2xl font-arena text-[#2B4C7E]">SALVO NO BANCO!</h3>
-                 <p className="text-xs font-bold text-gray-400 mt-2 uppercase">Sua foto também foi adicionada ao mural.</p>
+                 <Trophy size={60} className="mx-auto text-green-500 mb-4" />
+                 <h3 className="text-2xl font-arena text-[#2B4C7E]">CADASTRO OK!</h3>
                  <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">NOVO CADASTRO</button>
                </div>
              ) : (
@@ -385,11 +372,7 @@ const App: React.FC = () => {
 
         {view === ViewMode.PHOTOS && (
           <div className="space-y-8 animate-fadeIn">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 right-0 px-3 py-1 bg-[#F9E7C7] text-[#2B4C7E] text-[8px] font-black uppercase flex items-center gap-1">
-                {isCloud ? <><Database size={10} /> Nuvem</> : <><HardDrive size={10} /> Banco Local</>}
-              </div>
-
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
@@ -399,7 +382,7 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                  <p className="text-[10px] font-black uppercase text-gray-400">Galeria Oficial do Bloco • {eventPhotos.length} registros salvos</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
                 </div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
@@ -420,12 +403,25 @@ const App: React.FC = () => {
               <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
 
+            {matchedPhotoIds && (
+              <div className="bg-[#2B4C7E] text-white p-4 rounded-2xl flex items-center justify-between animate-fadeIn">
+                <span className="font-arena text-sm">Mostrando {filteredMuralPhotos.length} fotos encontradas para seu rosto</span>
+                <X size={20} className="cursor-pointer" onClick={clearFaceFilter} />
+              </div>
+            )}
+
             {fetching ? (
               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
+            ) : filteredMuralPhotos.length === 0 ? (
+              <div className="text-center py-20 opacity-30">
+                <ImageIcon size={64} className="mx-auto mb-4" />
+                <p className="font-arena text-2xl uppercase">{matchedPhotoIds ? "Nenhuma correspondência encontrada" : "MURAL VAZIO"}</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {filteredMuralPhotos.map(p => (
                   <div key={p.id} className="arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative">
+                    {matchedPhotoIds && <div className="absolute top-2 left-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">

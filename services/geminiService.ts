@@ -29,33 +29,35 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
   };
 
   try {
-    // Flash é mais rápido e estável para comparação de múltiplas partes de imagem
+    // Usamos o gemini-3-pro-preview para maior precisão em análise visual complexa
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: [
         {
           parts: [
-            { text: "Find the person from the FIRST IMAGE in the other images provided below. Return a JSON array with the matching IDs." },
+            { text: "Reference Person (the person looking for their photos):" },
             {
               inlineData: {
                 mimeType: "image/jpeg",
                 data: getBase64(referencePhoto)
               }
             },
+            { text: "Gallery of Event Photos (find the reference person in these):" },
             ...muralPhotos.flatMap(photo => [
-              { text: `ID:${photo.id}` },
+              { text: `ID: ${photo.id}` },
               {
                 inlineData: {
                   mimeType: "image/jpeg",
                   data: getBase64(photo.url)
                 }
               }
-            ])
+            ]),
+            { text: "Task: Identify which of the Gallery Photos contain the person shown in the Reference Person photo. Carnival context: ignore face paint, accessories, or slight lighting changes. Return a JSON array with the IDs of the matching photos only." }
           ]
         }
       ],
       config: {
-        systemInstruction: "You are an image matching expert for a fun carnival app. Your only job is to return a JSON array of strings containing the IDs of images where the person from the first image appears. If no matches, return [].",
+        systemInstruction: "You are an assistant designed to help people find themselves in a public event gallery. Your goal is to match the face of the reference person with faces in the gallery. Be very precise. Return the result strictly as a JSON list of strings (the IDs).",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -74,12 +76,11 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
       const result = JSON.parse(text);
       return Array.isArray(result) ? result : [];
     } catch (e) {
-      console.error("Erro no parse do Gemini:", text);
+      console.error("Erro no parse do JSON do Gemini:", text);
       return [];
     }
-  } catch (error: any) {
-    // Log detalhado para depuração sem quebrar o app
-    console.error("Erro na API Gemini Vision:", error);
-    throw new Error("Falha na análise da IA. Isso pode ocorrer devido a filtros de segurança ou conexões instáveis.");
+  } catch (error) {
+    console.error("Erro na busca facial Gemini:", error);
+    throw error;
   }
 }

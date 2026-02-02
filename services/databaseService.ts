@@ -1,12 +1,38 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Member, EventPhoto } from "../types";
+
+/* 
+  SQL PARA CRIAR AS TABELAS NO SUPABASE (Copie e cole no SQL Editor do Supabase):
+
+  CREATE TABLE membros (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    bloco TEXT,
+    tipo TEXT,
+    apto TEXT,
+    celular TEXT,
+    photo TEXT,
+    "createdAt" BIGINT
+  );
+
+  CREATE TABLE fotos_evento (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    "createdAt" BIGINT
+  );
+
+  -- Desative o RLS para testes ou crie políticas de acesso público:
+  ALTER TABLE membros DISABLE ROW LEVEL SECURITY;
+  ALTER TABLE fotos_evento DISABLE ROW LEVEL SECURITY;
+*/
 
 interface DBProvider {
   getMembers(): Promise<Member[]>;
   addMember(member: Member): Promise<void>;
   deleteMember(id: string): Promise<void>;
   getEventPhotos(): Promise<EventPhoto[]>;
-  addEventPhotos(photos: EventPhoto[]): Promise<void>;
+  addEventPhoto(photo: EventPhoto): Promise<void>;
   isLocal: boolean;
 }
 
@@ -18,9 +44,7 @@ const localProvider: DBProvider = {
   },
   async addMember(member: Member): Promise<void> {
     const members = await this.getMembers();
-    const updated = [member, ...members];
-    localStorage.setItem('carnaval_members', JSON.stringify(updated));
-    console.log("Membro salvo no banco local");
+    localStorage.setItem('carnaval_members', JSON.stringify([member, ...members]));
   },
   async deleteMember(id: string): Promise<void> {
     const members = await this.getMembers();
@@ -31,18 +55,9 @@ const localProvider: DBProvider = {
     const data = localStorage.getItem('carnaval_event_photos');
     return data ? JSON.parse(data) : [];
   },
-  async addEventPhotos(newPhotos: EventPhoto[]): Promise<void> {
-    try {
-      const photos = await this.getEventPhotos();
-      const updated = [...newPhotos, ...photos];
-      localStorage.setItem('carnaval_event_photos', JSON.stringify(updated));
-      console.log(`${newPhotos.length} fotos salvas no banco local`);
-    } catch (e: any) {
-      if (e.name === 'QuotaExceededError') {
-        throw new Error("Memória do navegador cheia! O banco de dados local atingiu o limite.");
-      }
-      throw e;
-    }
+  async addEventPhoto(photo: EventPhoto): Promise<void> {
+    const photos = await this.getEventPhotos();
+    localStorage.setItem('carnaval_event_photos', JSON.stringify([photo, ...photos]));
   }
 };
 
@@ -104,14 +119,14 @@ const getProvider = (): DBProvider => {
       }
       return (data as EventPhoto[]) || [];
     },
-    async addEventPhotos(photos: EventPhoto[]): Promise<void> {
+    async addEventPhoto(photo: EventPhoto): Promise<void> {
       const { error } = await supabaseInstance!
         .from('fotos_evento')
-        .insert(photos.map(p => ({ 
-          id: p.id, 
-          url: p.url, 
-          createdAt: p.createdAt 
-        })));
+        .insert([{ 
+          id: photo.id, 
+          url: photo.url, 
+          createdAt: photo.createdAt 
+        }]);
       if (error) throw error;
     }
   };
@@ -123,5 +138,5 @@ export const databaseService = {
   addMember: (m: Member) => getProvider().addMember(m),
   deleteMember: (id: string) => getProvider().deleteMember(id),
   getEventPhotos: () => getProvider().getEventPhotos(),
-  addEventPhotos: (p: EventPhoto[]) => getProvider().addEventPhotos(p)
+  addEventPhoto: (p: EventPhoto) => getProvider().addEventPhoto(p)
 };
