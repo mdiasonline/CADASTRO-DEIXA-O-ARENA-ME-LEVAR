@@ -203,7 +203,7 @@ const App: React.FC = () => {
           }
         } catch (err) {
           console.error("Erro na busca facial:", err);
-          notify("Ocorreu um erro na comunicação com a IA.");
+          notify("Ocorreu algum erro, informe ao administrador.");
         } finally {
           setIsFacialSearching(false);
         }
