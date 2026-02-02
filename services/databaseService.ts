@@ -18,7 +18,9 @@ const localProvider: DBProvider = {
   },
   async addMember(member: Member): Promise<void> {
     const members = await this.getMembers();
-    localStorage.setItem('carnaval_members', JSON.stringify([member, ...members]));
+    const updated = [member, ...members];
+    localStorage.setItem('carnaval_members', JSON.stringify(updated));
+    console.log("Membro salvo no banco local");
   },
   async deleteMember(id: string): Promise<void> {
     const members = await this.getMembers();
@@ -32,10 +34,12 @@ const localProvider: DBProvider = {
   async addEventPhotos(newPhotos: EventPhoto[]): Promise<void> {
     try {
       const photos = await this.getEventPhotos();
-      localStorage.setItem('carnaval_event_photos', JSON.stringify([...newPhotos, ...photos]));
+      const updated = [...newPhotos, ...photos];
+      localStorage.setItem('carnaval_event_photos', JSON.stringify(updated));
+      console.log(`${newPhotos.length} fotos salvas no banco local`);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') {
-        throw new Error("Memória do navegador cheia! Apague algumas fotos ou use o Supabase para armazenamento ilimitado.");
+        throw new Error("Memória do navegador cheia! O banco de dados local atingiu o limite.");
       }
       throw e;
     }
