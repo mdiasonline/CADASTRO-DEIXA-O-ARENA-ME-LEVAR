@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
@@ -46,8 +47,9 @@ const App: React.FC = () => {
   
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
+  const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   
   const defaultFormData = {
     nome: '',
@@ -167,7 +169,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Lógica da Busca Facial corrigida e otimizada
   const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventPhotos.length > 0) {
@@ -175,28 +176,22 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          // Otimizamos para 256px: resolução leve mas suficiente para o Gemini Pro
           const selfie = await compressImage(reader.result as string, 0.6, 256);
           setFaceSearchRef(selfie);
-          
-          // Reduzimos o lote para 12 fotos para evitar erros de payload na API
           const targetPhotos = eventPhotos.slice(0, 12);
-          
-          // Comprimimos as fotos do mural também
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
             url: await compressImage(p.url, 0.5, 256)
           })));
 
           const matches = await findFaceMatches(selfie, targets);
-          
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma foto encontrada no mural recente. Experimente uma selfie com melhor iluminação.");
+            alert("Nenhuma foto encontrada no mural recente.");
           }
         } catch (err) {
           console.error("Erro na busca facial:", err);
-          alert("Ocorreu um erro na comunicação com a IA. Tente novamente em instantes com uma foto mais nítida.");
+          alert("Ocorreu um erro na comunicação com a IA.");
         } finally {
           setIsFacialSearching(false);
         }
@@ -238,6 +233,12 @@ const App: React.FC = () => {
           setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
           setIsPasswordModalOpen(false);
         } catch (e) { alert("Erro ao excluir."); }
+      } else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) {
+        try {
+          await databaseService.deleteEventPhoto(photoIdToDelete);
+          setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete));
+          setIsPasswordModalOpen(false);
+        } catch (e) { alert("Erro ao excluir foto."); }
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
         setIsPasswordModalOpen(false);
@@ -247,6 +248,8 @@ const App: React.FC = () => {
       }
     } else { alert('SENHA INCORRETA!'); }
     setPasswordInput('');
+    setMemberIdToDelete(null);
+    setPhotoIdToDelete(null);
   };
 
   const handleDownloadPhoto = (url?: string, name?: string) => {
@@ -424,9 +427,17 @@ const App: React.FC = () => {
                     {matchedPhotoIds && <div className="absolute top-2 left-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                        <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full"><Download size={24} /></button>
-                        <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full"><Share2 size={24} /></button>
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
+                        <div className="flex gap-4">
+                          <button onClick={() => handleDownloadPhoto(p.url, p.id)} className="p-3 bg-white text-[#2B4C7E] rounded-full hover:scale-110 transition-transform"><Download size={24} /></button>
+                          <button onClick={() => handleSharePhoto(p.url)} className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform"><Share2 size={24} /></button>
+                        </div>
+                        <button 
+                          onClick={() => { setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} 
+                          className="p-3 bg-[#C63D2F] text-white rounded-full hover:scale-110 transition-transform"
+                        >
+                          <Trash2 size={24} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -497,10 +508,13 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
           <div className="arena-card w-full max-w-sm bg-white p-8">
             <h3 className="font-arena text-xl mb-4 text-center">ACESSO RESTRITO</h3>
+            <p className="text-[10px] font-bold text-gray-400 text-center mb-4 uppercase">
+              {passwordPurpose === 'DELETE_PHOTO' ? 'Confirme a senha para excluir a foto' : 'Digite a senha de administrador'}
+            </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setIsPasswordModalOpen(false)} className="flex-grow py-3 border-2 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
-              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg">Entrar</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); }} className="flex-grow py-3 border-2 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg">Confirmar</button>
             </div>
           </div>
         </div>
