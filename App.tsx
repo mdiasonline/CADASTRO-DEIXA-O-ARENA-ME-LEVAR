@@ -60,7 +60,7 @@ const App: React.FC = () => {
   
   const defaultFormData = {
     nome: '',
-    bloco: '', // Campo agora inicia vazio conforme solicitado
+    bloco: '', 
     tipo: 'FOLIÃO',
     apto: '',
     celular: '',
@@ -284,6 +284,7 @@ const App: React.FC = () => {
           setSelectedPhotoIds([]);
           setIsSelectionMode(false);
           setIsPasswordModalOpen(false);
+          notify("Fotos excluídas com sucesso!");
         } catch (e) { notify("Erro ao excluir as fotos selecionadas."); }
         finally { setLoading(false); }
       } else if (passwordPurpose === 'VIEW_LIST') {
@@ -318,6 +319,7 @@ const App: React.FC = () => {
         setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 300);
       }
     });
+    notify(`Iniciando download de ${selectedPhotoIds.length} fotos...`);
   };
 
   const handleSharePhoto = async (url?: string) => {
@@ -466,49 +468,84 @@ const App: React.FC = () => {
         )}
 
         {view === ViewMode.PHOTOS && (
-          <div className="space-y-8 animate-fadeIn pb-24">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
-                    {faceSearchRef ? <img src={faceSearchRef} className="w-full h-full object-cover" /> : <ScanFace className="text-[#2B4C7E]" size={32} />}
+          <div className="space-y-6 animate-fadeIn pb-24">
+            <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
+                      {faceSearchRef ? <img src={faceSearchRef} className="w-full h-full object-cover" /> : <ScanFace className="text-[#2B4C7E]" size={32} />}
+                    </div>
+                    {isFacialSearching && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><Loader2 className="animate-spin text-[#2B4C7E]" size={20} /></div>}
                   </div>
-                  {isFacialSearching && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><Loader2 className="animate-spin text-[#2B4C7E]" size={20} /></div>}
+                  <div>
+                    <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
+                    <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                  <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                <button 
-                  onClick={() => {
-                    setIsSelectionMode(!isSelectionMode);
-                    setSelectedPhotoIds([]);
-                  }} 
-                  className={`flex-grow md:flex-none p-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 transition-all ${isSelectionMode ? 'bg-[#2B4C7E] text-white border-[#2B4C7E]' : 'bg-white text-[#2B4C7E] border-[#2B4C7E]'}`}
-                >
-                  {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
-                  {isSelectionMode ? 'Cancelar' : 'Selecionar'}
-                </button>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  <button 
+                    onClick={() => {
+                      setIsSelectionMode(!isSelectionMode);
+                      setSelectedPhotoIds([]);
+                    }} 
+                    className={`flex-grow md:flex-none px-4 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 transition-all ${isSelectionMode ? 'bg-[#2B4C7E] text-white border-[#2B4C7E]' : 'bg-white text-[#2B4C7E] border-[#2B4C7E]'}`}
+                  >
+                    {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
+                    {isSelectionMode ? 'Cancelar' : 'Selecionar'}
+                  </button>
 
-                {!isSelectionMode && (
-                  <>
-                    {matchedPhotoIds ? (
-                      <button onClick={clearFaceFilter} className="flex-grow md:flex-none p-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
-                        <RefreshCcw size={16} /> Ver Tudo
+                  {!isSelectionMode && (
+                    <>
+                      {matchedPhotoIds ? (
+                        <button onClick={clearFaceFilter} className="flex-grow md:flex-none px-4 py-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
+                          <RefreshCcw size={16} /> Ver Tudo
+                        </button>
+                      ) : (
+                        <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none px-4 py-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
+                          <ScanFace size={20} /> Me Localizar
+                        </button>
+                      )}
+                      <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
+                        {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
                       </button>
-                    ) : (
-                      <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
-                        <ScanFace size={20} /> Me Localizar
-                      </button>
-                    )}
-                    <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
-                      {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
-                    </button>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* BARRA DE AÇÕES DE SELEÇÃO EM MASSA */}
+              {isSelectionMode && (
+                <div className="flex flex-wrap gap-2 w-full pt-4 border-t-2 border-gray-100 animate-slideUp">
+                  <button 
+                    onClick={handleSelectAll}
+                    className="flex-grow p-3 bg-white text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:bg-gray-50 transition-colors"
+                  >
+                    <CheckCheck size={18} />
+                    {selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0 ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
+                  </button>
+                  
+                  {selectedPhotoIds.length > 0 && (
+                    <>
+                      <button 
+                        onClick={handleDownloadSelected}
+                        className="flex-grow p-3 bg-[#F9B115] text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
+                      >
+                        <Download size={18} />
+                        Baixar ({selectedPhotoIds.length})
+                      </button>
+                      <button 
+                        onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsPasswordModalOpen(true); }}
+                        className="flex-grow p-3 bg-[#C63D2F] text-white border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
+                      >
+                        <Trash2 size={18} />
+                        Excluir ({selectedPhotoIds.length})
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
               <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
@@ -521,7 +558,7 @@ const App: React.FC = () => {
                 <p className="font-arena text-2xl uppercase">{matchedPhotoIds ? "Nenhuma correspondência encontrada" : "MURAL VAZIO"}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
                 {filteredMuralPhotos.map(p => (
                   <div 
                     key={p.id} 
@@ -529,14 +566,14 @@ const App: React.FC = () => {
                     className={`arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative cursor-pointer ${isSelectionMode && selectedPhotoIds.includes(p.id) ? 'border-[#F9B115] ring-4 ring-[#F9B115]/30' : ''}`}
                   >
                     {isSelectionMode && (
-                      <div className="absolute top-3 left-3 z-30">
+                      <div className="absolute top-2 left-2 z-30">
                         {selectedPhotoIds.includes(p.id) ? (
                           <div className="bg-[#F9B115] p-1 rounded-lg text-[#2B4C7E] border-2 border-[#2B4C7E] shadow-md animate-fadeIn">
-                            <CheckSquare size={24} />
+                            <CheckSquare size={20} />
                           </div>
                         ) : (
                           <div className="bg-white/80 backdrop-blur-sm p-1 rounded-lg text-gray-400 border-2 border-gray-300 shadow-md">
-                            <Square size={24} />
+                            <Square size={20} />
                           </div>
                         )}
                       </div>
@@ -701,7 +738,7 @@ const App: React.FC = () => {
           <div className="arena-card w-full max-w-sm bg-white p-8 animate-slideUp">
             <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
-              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? 'Confirme para gerenciar o mural' : 'Digite a senha de administrador'}
+              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? `Confirme para excluir ${passwordPurpose === 'DELETE_PHOTOS_BATCH' ? selectedPhotoIds.length : '1'} foto(s)` : 'Digite a senha de administrador'}
             </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
