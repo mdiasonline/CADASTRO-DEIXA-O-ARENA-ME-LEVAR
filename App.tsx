@@ -27,7 +27,8 @@ import {
   Upload,
   PlusCircle,
   ScanFace,
-  RefreshCcw
+  RefreshCcw,
+  Database
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -64,6 +65,8 @@ const App: React.FC = () => {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
+
+  const isCloud = databaseService.isConfigured();
 
   const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
     return new Promise((resolve) => {
@@ -123,7 +126,7 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const compressed = await compressImage(reader.result as string);
+        const compressed = await compressImage(reader.result as string, 0.5, 400);
         setFormData(prev => ({ ...prev, photo: compressed }));
       };
       reader.readAsDataURL(file);
@@ -135,7 +138,7 @@ const App: React.FC = () => {
     if (files && files.length > 0) {
       setLoading(true);
       const fileList = Array.from(files) as File[];
-      const uploadedPhotos: EventPhoto[] = [];
+      const photosToSave: EventPhoto[] = [];
 
       try {
         for (const file of fileList) {
@@ -146,20 +149,26 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
-          const compressed = await compressImage(base64, 0.5, 1000);
-          const newPhoto: EventPhoto = {
+          // Se estiver em modo LOCAL, a compressão precisa ser agressiva para caber no limite de 5MB do navegador
+          const compressionSize = isCloud ? 1000 : 600;
+          const compressionQuality = isCloud ? 0.6 : 0.4;
+
+          const compressed = await compressImage(base64, compressionQuality, compressionSize);
+          
+          photosToSave.push({
             id: Math.random().toString(36).substring(7),
             url: compressed,
             createdAt: Date.now()
-          };
-          
-          await databaseService.addEventPhoto(newPhoto);
-          uploadedPhotos.push(newPhoto);
+          });
         }
-        setEventPhotos(prev => [...uploadedPhotos, ...prev]);
+        
+        // SALVAMENTO EM LOTE: Evita race conditions e garante que tudo seja persistido
+        await databaseService.addEventPhotos(photosToSave);
+        setEventPhotos(prev => [...photosToSave, ...prev]);
+        
       } catch (err: any) {
         console.error("Erro no upload mural:", err);
-        alert("Erro ao processar fotos.");
+        alert(err.message || "Erro ao salvar fotos.");
       } finally {
         setLoading(false);
         if (muralUploadRef.current) muralUploadRef.current.value = "";
@@ -167,7 +176,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Lógica da Busca Facial corrigida e otimizada
   const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventPhotos.length > 0) {
@@ -175,13 +183,10 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          // 320px é o ponto ideal: nítido para a IA, mas leve para o payload
           const selfie = await compressImage(reader.result as string, 0.7, 320);
           setFaceSearchRef(selfie);
           
-          // Lote reduzido para 8 fotos para garantir que não bata no limite de tamanho da requisição
           const targetPhotos = eventPhotos.slice(0, 8);
-          
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
             url: await compressImage(p.url, 0.6, 320)
@@ -191,18 +196,16 @@ const App: React.FC = () => {
           
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma correspondência encontrada nas fotos recentes do mural.");
+            alert("Nenhuma correspondência encontrada nas fotos recentes.");
           }
         } catch (err: any) {
           console.error("Erro na busca facial:", err);
-          alert(err.message || "Erro na busca. Tente uma foto mais aproximada do seu rosto.");
+          alert(err.message || "Erro na busca.");
         } finally {
           setIsFacialSearching(false);
         }
       };
       reader.readAsDataURL(file);
-    } else if (eventPhotos.length === 0) {
-      alert("O mural está vazio! Poste fotos primeiro.");
     }
   };
 
@@ -373,7 +376,12 @@ const App: React.FC = () => {
 
         {view === ViewMode.PHOTOS && (
           <div className="space-y-8 animate-fadeIn">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg relative overflow-hidden">
+              {/* Indicador de Tipo de Armazenamento */}
+              <div className="absolute top-0 right-0 px-3 py-1 bg-[#F9E7C7] text-[#2B4C7E] text-[8px] font-black uppercase flex items-center gap-1">
+                {isCloud ? <><Database size={10} /> Nuvem</> : <><HardDrive size={10} /> Local (Navegador)</>}
+              </div>
+
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">

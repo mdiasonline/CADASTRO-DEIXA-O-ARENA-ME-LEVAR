@@ -1,38 +1,12 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Member, EventPhoto } from "../types";
-
-/* 
-  SQL PARA CRIAR AS TABELAS NO SUPABASE (Copie e cole no SQL Editor do Supabase):
-
-  CREATE TABLE membros (
-    id TEXT PRIMARY KEY,
-    nome TEXT NOT NULL,
-    bloco TEXT,
-    tipo TEXT,
-    apto TEXT,
-    celular TEXT,
-    photo TEXT,
-    "createdAt" BIGINT
-  );
-
-  CREATE TABLE fotos_evento (
-    id TEXT PRIMARY KEY,
-    url TEXT NOT NULL,
-    "createdAt" BIGINT
-  );
-
-  -- Desative o RLS para testes ou crie políticas de acesso público:
-  ALTER TABLE membros DISABLE ROW LEVEL SECURITY;
-  ALTER TABLE fotos_evento DISABLE ROW LEVEL SECURITY;
-*/
 
 interface DBProvider {
   getMembers(): Promise<Member[]>;
   addMember(member: Member): Promise<void>;
   deleteMember(id: string): Promise<void>;
   getEventPhotos(): Promise<EventPhoto[]>;
-  addEventPhoto(photo: EventPhoto): Promise<void>;
+  addEventPhotos(photos: EventPhoto[]): Promise<void>;
   isLocal: boolean;
 }
 
@@ -55,9 +29,16 @@ const localProvider: DBProvider = {
     const data = localStorage.getItem('carnaval_event_photos');
     return data ? JSON.parse(data) : [];
   },
-  async addEventPhoto(photo: EventPhoto): Promise<void> {
-    const photos = await this.getEventPhotos();
-    localStorage.setItem('carnaval_event_photos', JSON.stringify([photo, ...photos]));
+  async addEventPhotos(newPhotos: EventPhoto[]): Promise<void> {
+    try {
+      const photos = await this.getEventPhotos();
+      localStorage.setItem('carnaval_event_photos', JSON.stringify([...newPhotos, ...photos]));
+    } catch (e: any) {
+      if (e.name === 'QuotaExceededError') {
+        throw new Error("Memória do navegador cheia! Apague algumas fotos ou use o Supabase para armazenamento ilimitado.");
+      }
+      throw e;
+    }
   }
 };
 
@@ -119,14 +100,14 @@ const getProvider = (): DBProvider => {
       }
       return (data as EventPhoto[]) || [];
     },
-    async addEventPhoto(photo: EventPhoto): Promise<void> {
+    async addEventPhotos(photos: EventPhoto[]): Promise<void> {
       const { error } = await supabaseInstance!
         .from('fotos_evento')
-        .insert([{ 
-          id: photo.id, 
-          url: photo.url, 
-          createdAt: photo.createdAt 
-        }]);
+        .insert(photos.map(p => ({ 
+          id: p.id, 
+          url: p.url, 
+          createdAt: p.createdAt 
+        })));
       if (error) throw error;
     }
   };
@@ -138,5 +119,5 @@ export const databaseService = {
   addMember: (m: Member) => getProvider().addMember(m),
   deleteMember: (id: string) => getProvider().deleteMember(id),
   getEventPhotos: () => getProvider().getEventPhotos(),
-  addEventPhoto: (p: EventPhoto) => getProvider().addEventPhoto(p)
+  addEventPhotos: (p: EventPhoto[]) => getProvider().addEventPhotos(p)
 };
