@@ -29,22 +29,22 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
   };
 
   try {
-    // Usamos o gemini-3-flash-preview para maior velocidade e resiliência com múltiplas imagens
+    // Usamos o gemini-3-pro-preview para maior precisão em análise visual complexa
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: [
         {
           parts: [
-            { text: "USER REFERENCE PHOTO (Identify this person):" },
+            { text: "Reference Person (the person looking for their photos):" },
             {
               inlineData: {
                 mimeType: "image/jpeg",
                 data: getBase64(referencePhoto)
               }
             },
-            { text: "EVENT GALLERY (Find matching appearances):" },
+            { text: "Gallery of Event Photos (find the reference person in these):" },
             ...muralPhotos.flatMap(photo => [
-              { text: `PHOTO_ID: ${photo.id}` },
+              { text: `ID: ${photo.id}` },
               {
                 inlineData: {
                   mimeType: "image/jpeg",
@@ -52,18 +52,17 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
                 }
               }
             ]),
-            { text: "INSTRUCTION: Your task is to help a user find their own photos in a carnival event gallery. Compare the person in the 'USER REFERENCE PHOTO' with people in each photo from the 'EVENT GALLERY'. If you find a match, return the corresponding PHOTO_ID in a JSON array. Consider carnival context (glitter, accessories). Return ONLY the JSON array." }
+            { text: "Task: Identify which of the Gallery Photos contain the person shown in the Reference Person photo. Carnival context: ignore face paint, accessories, or slight lighting changes. Return a JSON array with the IDs of the matching photos only." }
           ]
         }
       ],
       config: {
-        systemInstruction: "You are a helpful assistant for a carnival event app. You help users find photos of themselves in a public gallery by comparing their selfie with other images. Be accurate and focused on facial structure.",
+        systemInstruction: "You are an assistant designed to help people find themselves in a public event gallery. Your goal is to match the face of the reference person with faces in the gallery. Be very precise. Return the result strictly as a JSON list of strings (the IDs).",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
           items: {
-            type: Type.STRING,
-            description: "A matching PHOTO_ID."
+            type: Type.STRING
           }
         },
         temperature: 0.1,
@@ -73,11 +72,15 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
     const text = response.text;
     if (!text) return [];
     
-    const result = JSON.parse(text);
-    return Array.isArray(result) ? result : [];
+    try {
+      const result = JSON.parse(text);
+      return Array.isArray(result) ? result : [];
+    } catch (e) {
+      console.error("Erro no parse do JSON do Gemini:", text);
+      return [];
+    }
   } catch (error) {
-    console.error("Erro detalhado na busca facial Gemini:", error);
-    // Relançamos para que o App.tsx possa capturar e informar o erro corretamente
+    console.error("Erro na busca facial Gemini:", error);
     throw error;
   }
 }

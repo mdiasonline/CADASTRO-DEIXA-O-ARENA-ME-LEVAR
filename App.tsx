@@ -175,28 +175,28 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          // Otimizamos para 300px: resolução suficiente para a IA, mas leve para a API
-          const selfie = await compressImage(reader.result as string, 0.5, 300);
+          // Otimizamos para 256px: resolução leve mas suficiente para o Gemini Pro
+          const selfie = await compressImage(reader.result as string, 0.6, 256);
           setFaceSearchRef(selfie);
           
-          // Pegar as últimas 20 fotos para busca (equilíbrio entre cobertura e sucesso da API)
-          const targetPhotos = eventPhotos.slice(0, 20);
+          // Reduzimos o lote para 12 fotos para evitar erros de payload na API
+          const targetPhotos = eventPhotos.slice(0, 12);
           
-          // Comprimimos as fotos do mural também para o envio
+          // Comprimimos as fotos do mural também
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
-            url: await compressImage(p.url, 0.4, 300)
+            url: await compressImage(p.url, 0.5, 256)
           })));
 
           const matches = await findFaceMatches(selfie, targets);
           
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma foto encontrada no mural recente. Tente outra selfie ou mude o ângulo.");
+            alert("Nenhuma foto encontrada no mural recente. Experimente uma selfie com melhor iluminação.");
           }
         } catch (err) {
           console.error("Erro na busca facial:", err);
-          alert("Ocorreu um erro técnico na busca. Verifique sua conexão e tente novamente com uma foto mais nítida.");
+          alert("Ocorreu um erro na comunicação com a IA. Tente novamente em instantes com uma foto mais nítida.");
         } finally {
           setIsFacialSearching(false);
         }
@@ -382,7 +382,7 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                  <p className="text-[10px] font-black uppercase text-gray-400">Encontre-se no mural usando IA</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia</p>
                 </div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
