@@ -30,7 +30,8 @@ import {
   ScanFace,
   RefreshCcw,
   CheckSquare,
-  Square
+  Square,
+  CheckCheck
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -217,6 +218,19 @@ const App: React.FC = () => {
     );
   };
 
+  const filteredMuralPhotos = useMemo(() => {
+    if (matchedPhotoIds === null) return eventPhotos;
+    return eventPhotos.filter(p => matchedPhotoIds.includes(p.id));
+  }, [eventPhotos, matchedPhotoIds]);
+
+  const handleSelectAll = () => {
+    if (selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0) {
+      setSelectedPhotoIds([]);
+    } else {
+      setSelectedPhotoIds(filteredMuralPhotos.map(p => p.id));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -290,7 +304,6 @@ const App: React.FC = () => {
     selectedPhotoIds.forEach((id, index) => {
       const photo = eventPhotos.find(p => p.id === id);
       if (photo) {
-        // Pequeno delay entre downloads para não sobrecarregar o browser
         setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 300);
       }
     });
@@ -309,11 +322,6 @@ const App: React.FC = () => {
       }
     } catch (e) { alert("Use o botão de Download."); }
   };
-
-  const filteredMuralPhotos = useMemo(() => {
-    if (matchedPhotoIds === null) return eventPhotos;
-    return eventPhotos.filter(p => matchedPhotoIds.includes(p.id));
-  }, [eventPhotos, matchedPhotoIds]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
@@ -433,6 +441,16 @@ const App: React.FC = () => {
                   {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
                   {isSelectionMode ? 'Cancelar' : 'Selecionar'}
                 </button>
+
+                {isSelectionMode && filteredMuralPhotos.length > 0 && (
+                  <button 
+                    onClick={handleSelectAll}
+                    className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform animate-fadeIn"
+                  >
+                    <CheckCheck size={18} />
+                    {selectedPhotoIds.length === filteredMuralPhotos.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
+                  </button>
+                )}
                 
                 {!isSelectionMode && (
                   <>
