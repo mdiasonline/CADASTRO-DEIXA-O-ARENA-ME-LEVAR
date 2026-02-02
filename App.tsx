@@ -399,7 +399,7 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                  <p className="text-[10px] font-black uppercase text-gray-400">Dados persistidos no navegador • {eventPhotos.length} fotos</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400">Galeria Oficial do Bloco • {eventPhotos.length} registros salvos</p>
                 </div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
