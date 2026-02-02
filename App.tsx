@@ -382,7 +382,7 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                  <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
                 </div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
