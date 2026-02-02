@@ -15,13 +15,8 @@ import {
   Camera,
   User,
   Filter,
-  CloudDownload,
-  DatabaseZap,
-  HardDrive,
-  Lock,
   X,
   BarChart3,
-  PieChart,
   Image as ImageIcon,
   Download,
   Share2,
@@ -32,7 +27,8 @@ import {
   CheckSquare,
   Square,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -64,7 +60,7 @@ const App: React.FC = () => {
   
   const defaultFormData = {
     nome: '',
-    bloco: 'BLOCO 1',
+    bloco: '', // Campo agora inicia vazio conforme solicitado
     tipo: 'FOLIÃO',
     apto: '',
     celular: '',
@@ -174,6 +170,7 @@ const App: React.FC = () => {
           uploadedPhotos.push(newPhoto);
         }
         setEventPhotos(prev => [...uploadedPhotos, ...prev]);
+        notify(`${uploadedPhotos.length} fotos postadas com sucesso!`);
       } catch (err: any) {
         console.error("Erro no upload mural:", err);
         notify("Erro ao processar fotos selecionadas.");
@@ -193,7 +190,7 @@ const App: React.FC = () => {
         try {
           const selfie = await compressImage(reader.result as string, 0.6, 256);
           setFaceSearchRef(selfie);
-          const targetPhotos = eventPhotos.slice(0, 12);
+          const targetPhotos = eventPhotos.slice(0, 15);
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
             url: await compressImage(p.url, 0.5, 256)
@@ -241,6 +238,10 @@ const App: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.nome || !formData.celular || !formData.bloco) {
+      notify("Preencha Nome, Celular e Bloco!");
+      return;
+    }
     setLoading(true);
     const newMember: Member = {
       id: Math.random().toString(36).substring(7),
@@ -347,15 +348,15 @@ const App: React.FC = () => {
     };
   }, [members]);
 
-  const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all";
-  const cargos = ['FOLIÃO', 'BATERIA', 'DIRETORIA', 'RAINHA', 'DESTAQUE'];
-  const blocosDisponiveis = ['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8','CONVIDADO'];
+  const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all placeholder:opacity-30";
+  const blocosDisponiveis = ['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8', 'CONVIDADO'];
+  const cargosDisponiveis = ['FOLIÃO', 'ORGANIZADOR', 'DIRETORIA', 'BATERIA', 'APOIO', 'MUSA/MUSO'];
 
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
         <div className="container mx-auto px-4 text-center flex flex-col items-center">
-          <h1 className="text-3xl md:text-5xl font-arena tracking-tighter">
+          <h1 className="text-3xl md:text-5xl font-arena tracking-tighter cursor-pointer" onClick={() => setView(ViewMode.HOME)}>
             DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
           </h1>
           <div className="mt-2 text-[10px] font-black uppercase tracking-widest opacity-60">Carnaval 2026</div>
@@ -375,51 +376,90 @@ const App: React.FC = () => {
               <h2 className="text-3xl font-arena text-[#F9B115]">MURAL DE FOTOS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
             </button>
+            <button onClick={() => { setView(ViewMode.STATISTICS); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400"><BarChart3 size={40} className="text-gray-500" /></div>
+              <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados em tempo real</p>
+            </button>
             <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Users size={40} className="text-[#C63D2F]" /></div>
               <h2 className="text-3xl font-arena text-[#C63D2F]">LISTA PRIVADA</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Apenas com Senha</p>
             </button>
-            <button onClick={() => { setPasswordPurpose('VIEW_STATS'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400"><BarChart3 size={40} className="text-gray-500" /></div>
-              <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados do Bloco</p>
-            </button>
           </div>
         )}
 
         {view === ViewMode.REGISTER && (
-          <div className="max-w-md mx-auto arena-card overflow-hidden bg-white animate-slideUp">
-             <div className="bg-[#2B4C7E] p-4 text-center text-white"><h2 className="text-2xl font-arena">INSCRIÇÃO</h2></div>
+          <div className="max-w-xl mx-auto arena-card overflow-hidden bg-white animate-slideUp">
+             <div className="bg-[#2B4C7E] p-6 text-center text-white border-b-4 border-[#F9B115]">
+               <h2 className="text-3xl font-arena">FICHA DE INSCRIÇÃO</h2>
+               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Preencha todos os dados abaixo</p>
+             </div>
              {isRegistered ? (
-               <div className="p-10 text-center">
-                 <Trophy size={60} className="mx-auto text-green-500 mb-4" />
-                 <h3 className="text-2xl font-arena text-[#2B4C7E]">CADASTRO OK!</h3>
-                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full mt-6 py-3 rounded-xl font-arena">NOVO CADASTRO</button>
+               <div className="p-10 text-center animate-fadeIn">
+                 <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500">
+                   <Trophy size={48} className="text-green-600" />
+                 </div>
+                 <h3 className="text-3xl font-arena text-[#2B4C7E] mb-2">CADASTRO CONCLUÍDO!</h3>
+                 <p className="font-bold text-gray-500 mb-8 uppercase text-xs">Você já faz parte da nossa folia!</p>
+                 <button onClick={() => setIsRegistered(false)} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase">CADASTRAR OUTRO</button>
                </div>
              ) : (
-               <form onSubmit={handleSubmit} className="p-8 space-y-5">
-                 <div className="flex flex-col items-center">
-                   <div className="relative w-28 h-28 border-4 border-[#2B4C7E] rounded-full overflow-hidden bg-gray-50">
-                     {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-6 text-gray-200" />}
-                   </div>
-                   <div className="flex gap-2 mt-3">
-                     <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-2 bg-[#2B4C7E] text-white rounded-full"><Camera size={18} /></button>
-                     <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-2 bg-[#F9B115] text-[#2B4C7E] rounded-full"><Upload size={18} /></button>
+               <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                 {/* Foto de Perfil */}
+                 <div className="flex flex-col items-center mb-4">
+                   <div className="relative group">
+                     <div className="w-32 h-32 border-4 border-[#2B4C7E] rounded-3xl overflow-hidden bg-gray-50 shadow-inner rotate-3 group-hover:rotate-0 transition-transform">
+                       {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-8 text-gray-200" />}
+                     </div>
+                     <div className="absolute -bottom-3 -right-3 flex gap-2">
+                       <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-3 bg-[#2B4C7E] text-white rounded-2xl border-2 border-white shadow-lg hover:scale-110 transition-transform"><Camera size={20} /></button>
+                       <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-3 bg-[#F9B115] text-[#2B4C7E] rounded-2xl border-2 border-white shadow-lg hover:scale-110 transition-transform"><Upload size={20} /></button>
+                     </div>
                    </div>
                    <input type="file" ref={cameraInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
                    <input type="file" ref={galleryInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
+                   <p className="text-[9px] font-black text-gray-400 mt-6 uppercase tracking-tighter">Sua foto ajuda a te encontrar no mural!</p>
                  </div>
-                 <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME COMPLETO" />
-                 <div className="grid grid-cols-2 gap-4">
-                   <select name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>{blocosDisponiveis.map(b => <option key={b}>{b}</option>)}</select>
-                   <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>{cargos.map(c => <option key={c}>{c}</option>)}</select>
+                 
+                 {/* Campos de Texto */}
+                 <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nome Completo</label>
+                      <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="EX: JOÃO DA SILVA" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Seu Bloco</label>
+                        <select required name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
+                          <option value="" disabled>SELECIONE SEU BLOCO</option>
+                          {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Cargo/Tipo</label>
+                        <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
+                          {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nº Apartamento</label>
+                        <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="EX: 101-B" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">WhatsApp / Celular</label>
+                        <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
+                      </div>
+                    </div>
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
-                   <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="APTO" />
-                   <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="WHATSAPP" />
-                 </div>
-                 <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-2xl font-arena text-2xl">{loading ? <Loader2 className="animate-spin mx-auto" /> : "CADASTRAR"}</button>
+
+                 <button type="submit" disabled={loading} className="btn-arena w-full py-5 rounded-2xl font-arena text-2xl flex items-center justify-center gap-3">
+                   {loading ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={28} /> CONFIRMAR INSCRIÇÃO</>}
+                 </button>
                </form>
              )}
           </div>
@@ -452,16 +492,6 @@ const App: React.FC = () => {
                   {isSelectionMode ? 'Cancelar' : 'Selecionar'}
                 </button>
 
-                {isSelectionMode && filteredMuralPhotos.length > 0 && (
-                  <button 
-                    onClick={handleSelectAll}
-                    className="flex-grow md:flex-none p-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform animate-fadeIn"
-                  >
-                    <CheckCheck size={18} />
-                    {selectedPhotoIds.length === filteredMuralPhotos.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
-                  </button>
-                )}
-                
                 {!isSelectionMode && (
                   <>
                     {matchedPhotoIds ? (
@@ -482,13 +512,6 @@ const App: React.FC = () => {
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
               <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
-
-            {matchedPhotoIds && (
-              <div className="bg-[#2B4C7E] text-white p-4 rounded-2xl flex items-center justify-between animate-fadeIn">
-                <span className="font-arena text-sm">Mostrando {filteredMuralPhotos.length} fotos encontradas para seu rosto</span>
-                <X size={20} className="cursor-pointer" onClick={clearFaceFilter} />
-              </div>
-            )}
 
             {fetching ? (
               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
@@ -518,8 +541,6 @@ const App: React.FC = () => {
                         )}
                       </div>
                     )}
-
-                    {matchedPhotoIds && <div className="absolute top-2 right-2 z-10 bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase">Rosto Identificado</div>}
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       {!isSelectionMode && (
@@ -541,85 +562,116 @@ const App: React.FC = () => {
                 ))}
               </div>
             )}
-
-            {/* Barra de Ações Selecionadas */}
-            {isSelectionMode && selectedPhotoIds.length > 0 && (
-              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-lg bg-white border-4 border-[#2B4C7E] rounded-3xl shadow-2xl p-4 flex items-center justify-between animate-slideUp">
-                <div className="flex flex-col">
-                  <span className="font-arena text-[#2B4C7E] text-lg">{selectedPhotoIds.length} FOTOS</span>
-                  <span className="text-[8px] font-black uppercase text-gray-400">Selecionadas</span>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={handleDownloadSelected}
-                    className="p-3 bg-[#F9B115] text-[#2B4C7E] rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform"
-                  >
-                    <Download size={18} /> Baixar
-                  </button>
-                  <button 
-                    onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsPasswordModalOpen(true); }}
-                    className="p-3 bg-[#C63D2F] text-white rounded-2xl flex items-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform"
-                  >
-                    <Trash2 size={18} /> Apagar
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {view === ViewMode.LIST && (
-           <div className="space-y-6 animate-fadeIn">
-              <div className="bg-white p-3 rounded-2xl border-4 border-[#2B4C7E] flex items-center gap-3">
+           <div className="space-y-6 animate-fadeIn pb-24">
+              <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]">
                 <Search className="text-[#2B4C7E]" />
-                <input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} />
+                <input placeholder="PESQUISAR POR NOME OU BLOCO..." className="w-full outline-none font-bold text-[#2B4C7E] placeholder:opacity-30" onChange={e => setSearchTerm(e.target.value)} />
               </div>
-              <div className="grid gap-4">
-                {members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase())).map(m => (
-                  <div key={m.id} className="bg-white p-4 rounded-2xl border-2 border-[#2B4C7E] flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full border-2 border-[#2B4C7E] overflow-hidden shrink-0">
-                      {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-2 text-gray-200" />}
+              <div className="grid gap-6">
+                {members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase()) || m.bloco.toLowerCase().includes(searchTerm.toLowerCase())).map(m => (
+                  <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E]/30 flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#F9B115] transition-colors group">
+                    <div className="w-20 h-20 rounded-2xl border-2 border-[#2B4C7E] overflow-hidden shrink-0 shadow-md">
+                      {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-4 text-gray-200" />}
                     </div>
-                    <div className="flex-grow">
-                      <h4 className="font-arena text-lg leading-none truncate">{m.nome}</h4>
-                      <span className="text-[9px] font-black uppercase text-[#F9B115]">{m.bloco}</span>
+                    <div className="flex-grow text-center md:text-left space-y-1">
+                      <div className="flex flex-col md:flex-row md:items-center gap-2">
+                        <h4 className="font-arena text-2xl leading-none text-[#2B4C7E]">{m.nome}</h4>
+                        <span className="text-[10px] font-black uppercase text-[#F9B115] bg-[#2B4C7E] px-2 py-0.5 rounded-lg w-fit mx-auto md:mx-0">{m.tipo}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-[#F9B115]"></div>
+                          <span className="text-xs font-bold uppercase text-gray-500">{m.bloco}</span>
+                        </div>
+                        {m.apto && (
+                          <div className="flex items-center gap-1.5">
+                            <Home size={12} className="text-gray-400" />
+                            <span className="text-xs font-bold text-gray-400">APTO: {m.apto}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <MessageCircle size={12} className="text-green-500" />
+                          <span className="text-xs font-bold text-gray-400">{m.celular}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-green-500 text-white rounded-full"><MessageCircle size={16} /></a>
-                       <button onClick={() => { setMemberIdToDelete(m.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="p-2 bg-red-100 text-red-600 rounded-full"><Trash2 size={16} /></button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="flex-grow md:flex-none p-4 bg-[#25D366] text-white rounded-2xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center"><MessageCircle size={20} /></a>
+                       <button onClick={() => { setMemberIdToDelete(m.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="flex-grow md:flex-none p-4 bg-[#C63D2F]/10 text-[#C63D2F] rounded-2xl hover:bg-[#C63D2F] hover:text-white transition-all flex items-center justify-center"><Trash2 size={20} /></button>
                     </div>
                   </div>
                 ))}
+                {members.length === 0 && !fetching && (
+                  <div className="text-center py-20 opacity-20">
+                    <Users size={64} className="mx-auto mb-4" />
+                    <p className="font-arena text-2xl">NENHUM FOLIÃO CADASTRADO</p>
+                  </div>
+                )}
               </div>
            </div>
         )}
 
         {view === ViewMode.STATISTICS && (
-           <div className="space-y-8 animate-fadeIn">
-              <div className="arena-card p-6 text-center"><h2 className="text-6xl font-arena text-[#2B4C7E]">{stats.total}</h2><p className="font-black uppercase text-xs text-gray-400">Total Foliões</p></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div className="arena-card p-6 bg-white">
-                    <h3 className="font-arena text-xl mb-4">BLOCOS</h3>
-                    {stats.byBloco.map(([n, c]) => (
-                      <div key={n} className="mb-3">
-                        <div className="flex justify-between text-[10px] font-black mb-1"><span>{n}</span><span>{c}</span></div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                          <div className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+           <div className="space-y-8 animate-fadeIn pb-24">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="bg-[#2B4C7E] p-3 rounded-2xl"><BarChart3 className="text-white" size={32} /></div>
+                <h2 className="text-3xl font-arena text-[#2B4C7E]">DADOS DA FOLIA</h2>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="arena-card p-8 text-center bg-white">
+                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Total de Foliões</h3>
+                  <p className="text-7xl font-arena text-[#2B4C7E]">{stats.total}</p>
+                </div>
+                
+                <div className="arena-card p-8 text-center bg-white border-[#F9B115] shadow-[#F9B115]">
+                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Fotos do Evento</h3>
+                  <p className="text-7xl font-arena text-[#F9B115]">{eventPhotos.length}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="arena-card p-8 bg-white">
+                   <h3 className="font-arena text-2xl mb-6 text-[#2B4C7E] flex items-center gap-2">
+                     <Filter size={20} className="text-[#F9B115]" /> POR BLOCO
+                   </h3>
+                   <div className="space-y-5">
+                      {stats.byBloco.map(([n, c]) => (
+                        <div key={n} className="group">
+                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
+                            <span>{n}</span>
+                            <span className="text-[#2B4C7E]">{c}</span>
+                          </div>
+                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
+                            <div className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                 </div>
-                 <div className="arena-card p-6 bg-white">
-                    <h3 className="font-arena text-xl mb-4 text-[#C63D2F]">CARGOS</h3>
-                    {stats.byCargo.map(([n, c]) => (
-                      <div key={n} className="mb-3">
-                        <div className="flex justify-between text-[10px] font-black mb-1"><span>{n}</span><span>{c}</span></div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                          <div className="h-full bg-[#C63D2F] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+                      ))}
+                   </div>
+                </div>
+
+                <div className="arena-card p-8 bg-white border-gray-400 shadow-gray-400">
+                   <h3 className="font-arena text-2xl mb-6 text-gray-600 flex items-center gap-2">
+                     <ShieldCheck size={20} className="text-[#F9B115]" /> POR CARGO
+                   </h3>
+                   <div className="space-y-5">
+                      {stats.byCargo.map(([n, c]) => (
+                        <div key={n} className="group">
+                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
+                            <span>{n}</span>
+                            <span className="text-gray-600">{c}</span>
+                          </div>
+                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
+                            <div className="h-full bg-gray-400 rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                 </div>
+                      ))}
+                   </div>
+                </div>
               </div>
            </div>
         )}
@@ -632,11 +684,11 @@ const App: React.FC = () => {
             <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]">
               <AlertCircle size={48} className="text-[#C63D2F]" />
             </div>
-            <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight">DEIXA O ARENA ME LEVAR</h3>
+            <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight uppercase">Atenção!</h3>
             <p className="font-bold text-gray-600 mb-8">{infoMessage}</p>
             <button 
               onClick={() => setInfoMessage(null)} 
-              className="btn-arena w-full py-4 rounded-2xl font-arena text-xl"
+              className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase"
             >
               ENTENDI!
             </button>
@@ -646,26 +698,27 @@ const App: React.FC = () => {
 
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-          <div className="arena-card w-full max-w-sm bg-white p-8">
-            <h3 className="font-arena text-xl mb-4 text-center">ACESSO RESTRITO</h3>
-            <p className="text-[10px] font-bold text-gray-400 text-center mb-4 uppercase">
-              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? 'Confirme a senha para excluir as fotos' : 'Digite a senha de administrador'}
+          <div className="arena-card w-full max-w-sm bg-white p-8 animate-slideUp">
+            <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
+            <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
+              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? 'Confirme para gerenciar o mural' : 'Digite a senha de administrador'}
             </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); }} className="flex-grow py-3 border-2 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
-              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg">Confirmar</button>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
+      <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50 shadow-2xl">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Home size={24} /><span className="text-[8px] font-bold mt-1">INÍCIO</span></button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[8px] font-bold mt-1">CADASTRO</span></button>
-          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-colors ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[8px] font-bold mt-1">MURAL</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-colors ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-60 hover:opacity-100'}`}><Users size={24} /><span className="text-[8px] font-bold mt-1">LISTA</span></button>
+          <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
+          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
+          <button onClick={() => { setView(ViewMode.STATISTICS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
+          <button onClick={() => { setView(ViewMode.PHOTOS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
         </div>
       </nav>
 
@@ -673,8 +726,8 @@ const App: React.FC = () => {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
-        .animate-slideUp { animation: slideUp 0.4s ease-out; }
-        .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; }
+        .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
       `}} />
     </div>
   );
