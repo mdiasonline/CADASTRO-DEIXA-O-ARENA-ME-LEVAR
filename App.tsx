@@ -356,7 +356,7 @@ const App: React.FC = () => {
       <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
         <div className="container mx-auto px-4 text-center flex flex-col items-center">
           <h1 className="text-3xl md:text-5xl font-arena tracking-tighter">
-            CADASTRO <span className="text-[#F9B115]">DA FOLIA</span>
+            DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
           </h1>
           <div className="mt-2 text-[10px] font-black uppercase tracking-widest opacity-60">Carnaval 2026</div>
         </div>
