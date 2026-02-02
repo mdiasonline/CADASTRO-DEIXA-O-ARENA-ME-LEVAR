@@ -175,33 +175,34 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          // Otimizamos para 256px: resolução leve mas suficiente para o Gemini Pro
-          const selfie = await compressImage(reader.result as string, 0.6, 256);
+          // 320px é o ponto ideal: nítido para a IA, mas leve para o payload
+          const selfie = await compressImage(reader.result as string, 0.7, 320);
           setFaceSearchRef(selfie);
           
-          // Reduzimos o lote para 12 fotos para evitar erros de payload na API
-          const targetPhotos = eventPhotos.slice(0, 12);
+          // Lote reduzido para 8 fotos para garantir que não bata no limite de tamanho da requisição
+          const targetPhotos = eventPhotos.slice(0, 8);
           
-          // Comprimimos as fotos do mural também
           const targets = await Promise.all(targetPhotos.map(async p => ({
             id: p.id,
-            url: await compressImage(p.url, 0.5, 256)
+            url: await compressImage(p.url, 0.6, 320)
           })));
 
           const matches = await findFaceMatches(selfie, targets);
           
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma foto encontrada no mural recente. Experimente uma selfie com melhor iluminação.");
+            alert("Nenhuma correspondência encontrada nas fotos recentes do mural.");
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Erro na busca facial:", err);
-          alert("Ocorreu um erro na comunicação com a IA. Tente novamente em instantes com uma foto mais nítida.");
+          alert(err.message || "Erro na busca. Tente uma foto mais aproximada do seu rosto.");
         } finally {
           setIsFacialSearching(false);
         }
       };
       reader.readAsDataURL(file);
+    } else if (eventPhotos.length === 0) {
+      alert("O mural está vazio! Poste fotos primeiro.");
     }
   };
 
