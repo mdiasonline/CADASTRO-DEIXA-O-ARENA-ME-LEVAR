@@ -31,7 +31,8 @@ import {
   RefreshCcw,
   CheckSquare,
   Square,
-  CheckCheck
+  CheckCheck,
+  AlertCircle
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -52,6 +53,9 @@ const App: React.FC = () => {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   
+  // Estados para Notificação Customizada
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | null>(null);
@@ -73,6 +77,10 @@ const App: React.FC = () => {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
+
+  const notify = (msg: string) => {
+    setInfoMessage(msg);
+  };
 
   const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
     return new Promise((resolve) => {
@@ -168,7 +176,7 @@ const App: React.FC = () => {
         setEventPhotos(prev => [...uploadedPhotos, ...prev]);
       } catch (err: any) {
         console.error("Erro no upload mural:", err);
-        alert("Erro ao processar fotos.");
+        notify("Erro ao processar fotos selecionadas.");
       } finally {
         setLoading(false);
         if (muralUploadRef.current) muralUploadRef.current.value = "";
@@ -194,11 +202,11 @@ const App: React.FC = () => {
           const matches = await findFaceMatches(selfie, targets);
           setMatchedPhotoIds(matches);
           if (matches.length === 0) {
-            alert("Nenhuma foto encontrada no mural recente.");
+            notify("Nenhuma foto sua foi encontrada no mural recente.");
           }
         } catch (err) {
           console.error("Erro na busca facial:", err);
-          alert("Ocorreu um erro na comunicação com a IA.");
+          notify("Ocorreu um erro na comunicação com a IA.");
         } finally {
           setIsFacialSearching(false);
         }
@@ -244,7 +252,7 @@ const App: React.FC = () => {
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      alert("Erro ao salvar cadastro.");
+      notify("Erro ao salvar o cadastro. Tente novamente.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -258,13 +266,13 @@ const App: React.FC = () => {
           await databaseService.deleteMember(memberIdToDelete);
           setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
           setIsPasswordModalOpen(false);
-        } catch (e) { alert("Erro ao excluir."); }
+        } catch (e) { notify("Erro ao realizar a exclusão."); }
       } else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) {
         try {
           await databaseService.deleteEventPhoto(photoIdToDelete);
           setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete));
           setIsPasswordModalOpen(false);
-        } catch (e) { alert("Erro ao excluir foto."); }
+        } catch (e) { notify("Erro ao excluir a foto."); }
       } else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) {
         try {
           setLoading(true);
@@ -275,7 +283,7 @@ const App: React.FC = () => {
           setSelectedPhotoIds([]);
           setIsSelectionMode(false);
           setIsPasswordModalOpen(false);
-        } catch (e) { alert("Erro ao excluir fotos selecionadas."); }
+        } catch (e) { notify("Erro ao excluir as fotos selecionadas."); }
         finally { setLoading(false); }
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
@@ -284,7 +292,9 @@ const App: React.FC = () => {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
       }
-    } else { alert('SENHA INCORRETA!'); }
+    } else { 
+      notify('SENHA INCORRETA!'); 
+    }
     setPasswordInput('');
     setMemberIdToDelete(null);
     setPhotoIdToDelete(null);
@@ -320,7 +330,7 @@ const App: React.FC = () => {
       } else {
         window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval! 🎭')}`, '_blank');
       }
-    } catch (e) { alert("Use o botão de Download."); }
+    } catch (e) { notify("Utilize o botão de Download direto."); }
   };
 
   const stats = useMemo(() => {
@@ -614,6 +624,25 @@ const App: React.FC = () => {
            </div>
         )}
       </main>
+
+      {/* MODAL DE NOTIFICAÇÃO PERSONALIZADA */}
+      {infoMessage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] shadow-[12px_12px_0px_#C63D2F] w-full max-w-sm overflow-hidden flex flex-col items-center text-center p-8 animate-slideUp">
+            <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]">
+              <AlertCircle size={48} className="text-[#C63D2F]" />
+            </div>
+            <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight">DEIXA O ARENA ME LEVAR</h3>
+            <p className="font-bold text-gray-600 mb-8">{infoMessage}</p>
+            <button 
+              onClick={() => setInfoMessage(null)} 
+              className="btn-arena w-full py-4 rounded-2xl font-arena text-xl"
+            >
+              ENTENDI!
+            </button>
+          </div>
+        </div>
+      )}
 
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
