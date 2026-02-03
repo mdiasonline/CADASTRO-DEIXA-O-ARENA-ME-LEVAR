@@ -470,7 +470,6 @@ const App: React.FC = () => {
     setMemberIdToDelete(null);
     setPhotoIdToDelete(null);
     setSponsorIdToDelete(null);
-    // Nota: sponsorIdToEdit não é limpo aqui para ser usado no preenchimento do form após validação
   };
 
   const handleDownloadPhoto = async (url?: string, name?: string) => {
@@ -1069,6 +1068,12 @@ const App: React.FC = () => {
            </div>
         )}
       </main>
+
+      <footer className="mt-auto py-4 text-center">
+        <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
+          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.5
+        </p>
+      </footer>
 
       {viewingPhoto && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
