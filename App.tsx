@@ -32,12 +32,18 @@ import {
   Maximize2,
   ChevronLeft,
   ChevronRight,
-  CalendarDays
+  CalendarDays,
+  Music4
 } from 'lucide-react';
 
-// URL DO LOGOTIPO ENVIADO
-// Sugestão: Salve a imagem enviada como 'logo.png' na raiz do projeto
-const LOGO_URL = "https://raw.githubusercontent.com/stackblitz/stackblitz-images/main/carnival-logo-arena.png"; // Placeholder: substitua pelo caminho do seu arquivo local se necessário
+// Componente de Logo SVG para garantir que sempre carregue
+const ArenaLogo = () => (
+  <div className="relative w-16 h-16 md:w-24 md:h-24 flex items-center justify-center bg-[#F9B115] rounded-full border-4 border-[#2B4C7E] shadow-lg transform -rotate-6">
+    <Music4 size={40} className="text-[#2B4C7E] md:hidden" />
+    <Music4 size={60} className="text-[#2B4C7E] hidden md:block" />
+    <div className="absolute -top-1 -right-1 w-6 h-6 bg-[#C63D2F] rounded-full border-2 border-white animate-bounce"></div>
+  </div>
+);
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.HOME);
@@ -50,17 +56,13 @@ const App: React.FC = () => {
   const [cargoFilter, setCargoFilter] = useState('');
   const [isRegistered, setIsRegistered] = useState(false);
   
-  // Estados para Busca Facial
   const [faceSearchRef, setFaceSearchRef] = useState<string | null>(null);
   const [matchedPhotoIds, setMatchedPhotoIds] = useState<string[] | null>(null);
   const [isFacialSearching, setIsFacialSearching] = useState(false);
 
-  // Estados para Seleção e Visualização
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<EventPhoto | null>(null);
-  
-  // Estados para Notificação Customizada
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -85,9 +87,7 @@ const App: React.FC = () => {
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
 
-  const notify = (msg: string) => {
-    setInfoMessage(msg);
-  };
+  const notify = (msg: string) => setInfoMessage(msg);
 
   const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
     return new Promise((resolve) => {
@@ -154,103 +154,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handleMuralUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setLoading(true);
-      const fileList = Array.from(files) as File[];
-      const uploadedPhotos: EventPhoto[] = [];
-
-      try {
-        for (const file of fileList) {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-
-          const compressed = await compressImage(base64, 0.3, 500);
-          const newPhoto: EventPhoto = {
-            id: Math.random().toString(36).substring(7),
-            url: compressed,
-            createdAt: Date.now()
-          };
-          
-          await databaseService.addEventPhoto(newPhoto);
-          uploadedPhotos.push(newPhoto);
-        }
-        setEventPhotos(prev => [...uploadedPhotos, ...prev]);
-        notify(`${uploadedPhotos.length} fotos postadas com sucesso!`);
-      } catch (err: any) {
-        console.error("Erro no upload mural:", err);
-        notify("Erro ao processar fotos selecionadas.");
-      } finally {
-        setLoading(false);
-        if (muralUploadRef.current) muralUploadRef.current.value = "";
-      }
-    }
-  };
-
-  const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && eventPhotos.length > 0) {
-      setIsFacialSearching(true);
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const selfie = await compressImage(reader.result as string, 0.6, 256);
-          setFaceSearchRef(selfie);
-          const targetPhotos = eventPhotos.slice(0, 15);
-          const targets = await Promise.all(targetPhotos.map(async p => ({
-            id: p.id,
-            url: await compressImage(p.url, 0.5, 256)
-          })));
-
-          const matches = await findFaceMatches(selfie, targets);
-          setMatchedPhotoIds(matches);
-          if (matches.length === 0) {
-            notify("Nenhuma foto sua foi encontrada no mural recente.");
-          }
-        } catch (err) {
-          console.error("Erro na busca facial:", err);
-          notify("Ocorreu algum erro, informe ao administrador.");
-        } finally {
-          setIsFacialSearching(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const clearFaceFilter = () => {
-    setMatchedPhotoIds(null);
-    setFaceSearchRef(null);
-  };
-
-  const togglePhotoSelection = (id: string) => {
-    setSelectedPhotoIds(prev => 
-      prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
-    );
-  };
-
-  const filteredMuralPhotos = useMemo(() => {
-    if (matchedPhotoIds === null) return eventPhotos;
-    return eventPhotos.filter(p => matchedPhotoIds.includes(p.id));
-  }, [eventPhotos, matchedPhotoIds]);
-
-  const handleSelectAll = () => {
-    if (selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0) {
-      setSelectedPhotoIds([]);
-    } else {
-      setSelectedPhotoIds(filteredMuralPhotos.map(p => p.id));
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nome || !formData.celular || !formData.bloco) {
-      notify("Preencha Nome, Celular e Bloco!");
+    if (!formData.nome || !formData.celular || !formData.bloco || !formData.apto) {
+      notify("Preencha Nome, Bloco, Apto e Celular!");
       return;
     }
     setLoading(true);
@@ -264,7 +171,7 @@ const App: React.FC = () => {
       setMembers(prev => [newMember, ...prev]);
       setIsRegistered(true);
     } catch (error: any) {
-      notify("Erro ao salvar o cadastro. Tente novamente.");
+      notify("Erro ao salvar o cadastro.");
     } finally {
       setLoading(false);
       setFormData(defaultFormData);
@@ -274,168 +181,68 @@ const App: React.FC = () => {
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
       if (passwordPurpose === 'DELETE' && memberIdToDelete) {
-        try {
-          await databaseService.deleteMember(memberIdToDelete);
-          setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
-          setIsPasswordModalOpen(false);
-        } catch (e) { notify("Erro ao realizar a exclusão."); }
-      } else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) {
-        try {
-          await databaseService.deleteEventPhoto(photoIdToDelete);
-          setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete));
-          setIsPasswordModalOpen(false);
-          setViewingPhoto(null);
-        } catch (e) { notify("Erro ao excluir a foto."); }
-      } else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) {
-        try {
-          setLoading(true);
-          for (const id of selectedPhotoIds) {
-            await databaseService.deleteEventPhoto(id);
-          }
-          setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id)));
-          setSelectedPhotoIds([]);
-          setIsSelectionMode(false);
-          setIsPasswordModalOpen(false);
-          notify("Fotos excluídas com sucesso!");
-        } catch (e) { notify("Erro ao excluir as fotos selecionadas."); }
-        finally { setLoading(false); }
+        await databaseService.deleteMember(memberIdToDelete);
+        setMembers(prev => prev.filter(m => m.id !== memberIdToDelete));
       } else if (passwordPurpose === 'VIEW_LIST') {
         setView(ViewMode.LIST);
-        setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'VIEW_STATS') {
         setView(ViewMode.STATISTICS);
-        setIsPasswordModalOpen(false);
       }
+      setIsPasswordModalOpen(false);
     } else { 
       notify('SENHA INCORRETA!'); 
     }
     setPasswordInput('');
-    setMemberIdToDelete(null);
-    setPhotoIdToDelete(null);
   };
 
-  const handleDownloadPhoto = async (url?: string, name?: string) => {
-    if (!url) return;
-
-    // Detecta se é um navegador móvel ou restrito (Instagram/FB) que suporta Share
-    const isRestricted = /Instagram|FBAN|FBAV|Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const fileName = `folia_${name || Date.now()}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
-
-      if (isRestricted && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Foto Carnaval 2026',
-        });
-        return; 
+  const handleMuralUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setLoading(true);
+      try {
+        // Fix: Added explicit type cast to File[] for Array.from(files) to ensure 'file' is recognized as a Blob/File
+        for (const file of Array.from(files) as File[]) {
+          const reader = new FileReader();
+          const base64 = await new Promise<string>((res) => {
+            reader.onload = () => res(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          const compressed = await compressImage(base64, 0.3, 500);
+          const newPhoto: EventPhoto = { id: Math.random().toString(36).substring(7), url: compressed, createdAt: Date.now() };
+          await databaseService.addEventPhoto(newPhoto);
+          setEventPhotos(prev => [newPhoto, ...prev]);
+        }
+        notify("Fotos enviadas!");
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.warn("Navegador não suporta compartilhamento de arquivo ou erro na preparação:", e);
     }
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `folia_${name || Date.now()}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
-  const handleDownloadSelected = () => {
-    selectedPhotoIds.forEach((id, index) => {
-      const photo = eventPhotos.find(p => p.id === id);
-      if (photo) {
-        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 500);
-      }
-    });
-    notify(`Iniciando ação de download para ${selectedPhotoIds.length} fotos...`);
-  };
-
-  const handleSharePhoto = async (url?: string) => {
-    if (!url) return;
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const file = new File([blob], `foto_folia.jpg`, { type: 'image/jpeg' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Carnaval 2026' });
-      } else {
-        window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto do carnaval! 🎭')}`, '_blank');
-      }
-    } catch (e) { notify("Utilize o botão de Download direto."); }
-  };
-
-  const navigatePhoto = useCallback((direction: 'next' | 'prev') => {
-    if (!viewingPhoto) return;
-    const currentIndex = filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id);
-    if (currentIndex === -1) return;
-
-    let nextIndex;
-    if (direction === 'next') {
-      nextIndex = (currentIndex + 1) % filteredMuralPhotos.length;
-    } else {
-      nextIndex = (currentIndex - 1 + filteredMuralPhotos.length) % filteredMuralPhotos.length;
-    }
-    setViewingPhoto(filteredMuralPhotos[nextIndex]);
-  }, [viewingPhoto, filteredMuralPhotos]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!viewingPhoto) return;
-      if (e.key === 'ArrowRight') navigatePhoto('next');
-      if (e.key === 'ArrowLeft') navigatePhoto('prev');
-      if (e.key === 'Escape') setViewingPhoto(null);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewingPhoto, navigatePhoto]);
+  const filteredMuralPhotos = useMemo(() => {
+    if (matchedPhotoIds === null) return eventPhotos;
+    return eventPhotos.filter(p => matchedPhotoIds.includes(p.id));
+  }, [eventPhotos, matchedPhotoIds]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
-    const byCargo: Record<string, number> = {};
-    members.forEach(m => {
-      byBloco[m.bloco] = (byBloco[m.bloco] || 0) + 1;
-      byCargo[m.tipo] = (byCargo[m.tipo] || 0) + 1;
-    });
+    members.forEach(m => byBloco[m.bloco] = (byBloco[m.bloco] || 0) + 1);
     return {
       byBloco: Object.entries(byBloco).sort((a,b) => b[1]-a[1]),
-      byCargo: Object.entries(byCargo).sort((a,b) => b[1]-a[1]),
       total: members.length
     };
   }, [members]);
 
   const inputStyles = "w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white transition-all placeholder:opacity-30";
-  const blocosDisponiveis = ['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8', 'CONVIDADO'];
-  const cargosDisponiveis = ['FOLIÃO', 'ORGANIZADOR', 'DIRETORIA', 'BATERIA', 'APOIO', 'MUSA/MUSO'];
-
-  const filteredMembers = useMemo(() => {
-    return members.filter(m => {
-      const matchesSearch = !searchTerm || 
-        m.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        m.bloco.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesBloco = !blocoFilter || m.bloco === blocoFilter;
-      const matchesCargo = !cargoFilter || m.tipo === cargoFilter;
-      return matchesSearch && matchesBloco && matchesCargo;
-    });
-  }, [members, searchTerm, blocoFilter, cargoFilter]);
+  const blocosDisponiveis = ['ARENA 1', 'ARENA 2', 'ARENA 3', 'ARENA 4', 'CONVIDADO'];
+  const cargosDisponiveis = ['FOLIÃO', 'BATERIA', 'DIRETORIA', 'APOIO'];
 
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-[#2B4C7E] text-white py-6 md:py-8 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
         <div className="container mx-auto px-4 flex flex-col items-center justify-center">
-          <div 
-            className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
-            onClick={() => setView(ViewMode.HOME)}
-          >
-            {/* LOGOTIPO DO BLOCO SEM FUNDO E SEM BORDA */}
-            <div className="w-16 h-16 md:w-24 md:h-24 flex items-center justify-center shrink-0">
-              <img src={LOGO_URL} alt="Logo Bloco Deixa o Arena Me Levar" className="w-full h-full object-contain" />
-            </div>
-            
+          <div className="flex items-center gap-4 cursor-pointer" onClick={() => setView(ViewMode.HOME)}>
+            <ArenaLogo />
             <div className="flex flex-col text-left">
               <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
                 DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
@@ -453,23 +260,13 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn mt-6">
             <button onClick={() => setView(ViewMode.REGISTER)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]"><UserPlus size={40} className="text-[#2B4C7E]" /></div>
-              <h2 className="text-3xl font-arena text-[#2B4C7E]">NOVA INSCRIÇÃO</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Cadastro de Folião</p>
+              <h2 className="text-3xl font-arena text-[#2B4C7E]">CADASTRO</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Inscrição de Membros</p>
             </button>
             <button onClick={() => setView(ViewMode.PHOTOS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#F9B115]"><ImageIcon size={40} className="text-[#F9B115]" /></div>
-              <h2 className="text-3xl font-arena text-[#F9B115]">MURAL DE FOTOS</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
-            </button>
-            <button onClick={() => { setView(ViewMode.STATISTICS); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400"><BarChart3 size={40} className="text-gray-500" /></div>
-              <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados em tempo real</p>
-            </button>
-            <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Users size={40} className="text-[#C63D2F]" /></div>
-              <h2 className="text-3xl font-arena text-[#C63D2F]">LISTA PRIVADA</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Apenas com Senha</p>
+              <h2 className="text-3xl font-arena text-[#F9B115]">MURAL</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Fotos da Folia</p>
             </button>
           </div>
         )}
@@ -477,73 +274,58 @@ const App: React.FC = () => {
         {view === ViewMode.REGISTER && (
           <div className="max-w-xl mx-auto arena-card overflow-hidden bg-white animate-slideUp">
              <div className="bg-[#2B4C7E] p-6 text-center text-white border-b-4 border-[#F9B115]">
-               <h2 className="text-3xl font-arena">FICHA DE INSCRIÇÃO</h2>
-               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Preencha todos os dados abaixo</p>
+               <h2 className="text-3xl font-arena">FICHA DE MEMBRO</h2>
+               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Preencha os dados obrigatórios</p>
              </div>
              {isRegistered ? (
                <div className="p-10 text-center animate-fadeIn">
-                 <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500">
-                   <Trophy size={48} className="text-green-600" />
-                 </div>
-                 <h3 className="text-3xl font-arena text-[#2B4C7E] mb-2">CADASTRO CONCLUÍDO!</h3>
-                 <p className="font-bold text-gray-500 mb-8 uppercase text-xs">Você já faz parte da nossa folia!</p>
+                 <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500"><Trophy size={48} className="text-green-600" /></div>
+                 <h3 className="text-3xl font-arena text-[#2B4C7E] mb-2">CADASTRO OK!</h3>
                  <button onClick={() => setIsRegistered(false)} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase">CADASTRAR OUTRO</button>
                </div>
              ) : (
                <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                 {/* Foto de Perfil */}
                  <div className="flex flex-col items-center mb-4">
                    <div className="relative group">
-                     <div className="w-32 h-32 border-4 border-[#2B4C7E] rounded-3xl overflow-hidden bg-gray-50 shadow-inner rotate-3 group-hover:rotate-0 transition-transform">
+                     <div className="w-32 h-32 border-4 border-[#2B4C7E] rounded-3xl overflow-hidden bg-gray-50 shadow-inner rotate-3 transition-transform group-hover:rotate-0">
                        {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-8 text-gray-200" />}
                      </div>
                      <div className="absolute -bottom-3 -right-3 flex gap-2">
-                       <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-3 bg-[#2B4C7E] text-white rounded-2xl border-2 border-white shadow-lg hover:scale-110 transition-transform"><Camera size={20} /></button>
-                       <button type="button" onClick={() => galleryInputRef.current?.click()} className="p-3 bg-[#F9B115] text-[#2B4C7E] rounded-2xl border-2 border-white shadow-lg hover:scale-110 transition-transform"><Upload size={20} /></button>
+                       <button type="button" onClick={() => cameraInputRef.current?.click()} className="p-3 bg-[#2B4C7E] text-white rounded-2xl border-2 border-white shadow-lg"><Camera size={20} /></button>
                      </div>
                    </div>
                    <input type="file" ref={cameraInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
-                   <input type="file" ref={galleryInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
-                   <p className="text-[9px] font-black text-gray-400 mt-6 uppercase tracking-tighter">Sua foto ajuda a te encontrar no mural!</p>
+                   <p className="text-[9px] font-black text-gray-400 mt-6 uppercase tracking-widest">Sua selfie ajuda no reconhecimento facial</p>
                  </div>
                  
-                 {/* Campos de Texto */}
                  <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nome Completo</label>
-                      <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="EX: JOÃO DA SILVA" />
+                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1 tracking-widest">Nome Completo</label>
+                      <input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="NOME DO FOLIÃO" />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Seu Bloco</label>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1 tracking-widest">Bloco</label>
                         <select required name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}>
-                          <option value="" disabled>SELECIONE SEU BLOCO</option>
+                          <option value="">SELECIONE</option>
                           {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Cargo/Tipo</label>
-                        <select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>
-                          {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1 tracking-widest">Apto</label>
+                        <input required name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="Nº APTO" />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nº Apartamento</label>
-                        <input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="EX: 101-B" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">WhatsApp / Celular</label>
-                        <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
-                      </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1 tracking-widest">WhatsApp / Celular</label>
+                      <input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
                     </div>
                  </div>
 
                  <button type="submit" disabled={loading} className="btn-arena w-full py-5 rounded-2xl font-arena text-2xl flex items-center justify-center gap-3">
-                   {loading ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={28} /> CONFIRMAR INSCRIÇÃO</>}
+                   {loading ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={28} /> CONFIRMAR</>}
                  </button>
                </form>
              )}
@@ -552,385 +334,58 @@ const App: React.FC = () => {
 
         {view === ViewMode.PHOTOS && (
           <div className="space-y-6 animate-fadeIn pb-24">
-            <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
-              <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
-                      {faceSearchRef ? <img src={faceSearchRef} className="w-full h-full object-cover" /> : <ScanFace className="text-[#2B4C7E]" size={32} />}
-                    </div>
-                    {isFacialSearching && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><Loader2 className="animate-spin text-[#2B4C7E]" size={20} /></div>}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                    <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  <button 
-                    onClick={() => {
-                      setIsSelectionMode(!isSelectionMode);
-                      setSelectedPhotoIds([]);
-                    }} 
-                    className={`flex-grow md:flex-none px-4 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 transition-all ${isSelectionMode ? 'bg-[#2B4C7E] text-white border-[#2B4C7E]' : 'bg-white text-[#2B4C7E] border-[#2B4C7E]'}`}
-                  >
-                    {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
-                    {isSelectionMode ? 'Cancelar' : 'Selecionar'}
-                  </button>
-
-                  {!isSelectionMode && (
-                    <>
-                      {matchedPhotoIds ? (
-                        <button onClick={clearFaceFilter} className="flex-grow md:flex-none px-4 py-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
-                          <RefreshCcw size={16} /> Ver Tudo
-                        </button>
-                      ) : (
-                        <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none px-4 py-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
-                          <ScanFace size={20} /> Me Localizar
-                        </button>
-                      )}
-                      <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
-                        {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
-                      </button>
-                    </>
-                  )}
-                </div>
+            <div className="bg-white p-6 rounded-3xl border-4 border-[#F9B115] flex flex-col md:flex-row justify-between items-center gap-4">
+              <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
+              <div className="flex gap-2">
+                <button onClick={() => muralUploadRef.current?.click()} className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 font-arena">
+                  <PlusCircle size={20} /> POSTAR FOTO
+                </button>
               </div>
-
-              {/* BARRA DE AÇÕES DE SELEÇÃO EM MASSA */}
-              {isSelectionMode && (
-                <div className="flex flex-wrap gap-2 w-full pt-4 border-t-2 border-gray-100 animate-slideUp">
-                  <button 
-                    onClick={handleSelectAll}
-                    className="flex-grow p-3 bg-white text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:bg-gray-50 transition-colors"
-                  >
-                    <CheckCheck size={18} />
-                    {selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0 ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
-                  </button>
-                  
-                  {selectedPhotoIds.length > 0 && (
-                    <>
-                      <button 
-                        onClick={handleDownloadSelected}
-                        className="flex-grow p-3 bg-[#F9B115] text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
-                      >
-                        <Download size={18} />
-                        Baixar ({selectedPhotoIds.length})
-                      </button>
-                      <button 
-                        onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsPasswordModalOpen(true); }}
-                        className="flex-grow p-3 bg-[#C63D2F] text-white border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
-                      >
-                        <Trash2 size={18} />
-                        Excluir ({selectedPhotoIds.length})
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              
               <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
-              <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
 
-            {fetching ? (
-              <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
-            ) : filteredMuralPhotos.length === 0 ? (
-              <div className="text-center py-20 opacity-30">
-                <ImageIcon size={64} className="mx-auto mb-4" />
-                <p className="font-arena text-2xl uppercase">{matchedPhotoIds ? "Nenhuma correspondência encontrada" : "MURAL VAZIO"}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                {filteredMuralPhotos.map(p => (
-                  <div 
-                    key={p.id} 
-                    onClick={() => isSelectionMode ? togglePhotoSelection(p.id) : setViewingPhoto(p)}
-                    className={`arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative cursor-pointer ${isSelectionMode && selectedPhotoIds.includes(p.id) ? 'border-[#F9B115] ring-4 ring-[#F9B115]/30' : ''}`}
-                  >
-                    {isSelectionMode && (
-                      <div className="absolute top-2 left-2 z-30">
-                        {selectedPhotoIds.includes(p.id) ? (
-                          <div className="bg-[#F9B115] p-1 rounded-lg text-[#2B4C7E] border-2 border-[#2B4C7E] shadow-md animate-fadeIn">
-                            <CheckSquare size={20} />
-                          </div>
-                        ) : (
-                          <div className="bg-white/80 backdrop-blur-sm p-1 rounded-lg text-gray-400 border-2 border-gray-300 shadow-md">
-                            <Square size={20} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Botões rápidos no topo direito de cada foto no mural */}
-                    {!isSelectionMode && (
-                      <div className="absolute top-2 right-2 z-30 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-2 bg-white/90 text-[#2B4C7E] rounded-lg shadow-sm backdrop-blur-sm border border-[#2B4C7E]/20"><Download size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSharePhoto(p.url); }} className="p-2 bg-[#25D366]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#25D366]/20"><Share2 size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-[#C63D2F]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#C63D2F]/20"><Trash2 size={14} /></button>
-                      </div>
-                    )}
-
-                    <div className="aspect-square relative">
-                      <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
-                      {!isSelectionMode && (
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
-                           <Maximize2 className="text-white drop-shadow-lg" size={32} />
-                        </div>
-                      )}
-                    </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {filteredMuralPhotos.map(p => (
+                <div key={p.id} className="arena-card overflow-hidden bg-white group cursor-pointer" onClick={() => setViewingPhoto(p)}>
+                  <div className="aspect-square relative">
+                    <img src={p.url} className="w-full h-full object-cover" />
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-
-        {view === ViewMode.LIST && (
-           <div className="space-y-6 animate-fadeIn pb-24">
-              <div className="flex flex-col gap-4">
-                <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]">
-                  <Search className="text-[#2B4C7E]" />
-                  <input placeholder="PESQUISAR POR NOME OU BLOCO..." className="w-full outline-none font-bold text-[#2B4C7E] placeholder:opacity-30" onChange={e => setSearchTerm(e.target.value)} />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative">
-                    <select 
-                      value={blocoFilter} 
-                      onChange={e => setBlocoFilter(e.target.value)}
-                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
-                    >
-                      <option value="">TODOS OS BLOCOS</option>
-                      {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><Filter size={16} /></div>
-                  </div>
-                  <div className="relative">
-                    <select 
-                      value={cargoFilter} 
-                      onChange={e => setCargoFilter(e.target.value)}
-                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
-                    >
-                      <option value="">TODOS OS CARGOS</option>
-                      {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ShieldCheck size={16} /></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-6">
-                {filteredMembers.map(m => (
-                  <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E]/30 flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#F9B115] transition-colors group">
-                    <div className="w-20 h-20 rounded-2xl border-2 border-[#2B4C7E] overflow-hidden shrink-0 shadow-md">
-                      {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-4 text-gray-200" />}
-                    </div>
-                    <div className="flex-grow text-center md:text-left space-y-1">
-                      <div className="flex flex-col md:flex-row md:items-center gap-2">
-                        <h4 className="font-arena text-2xl leading-none text-[#2B4C7E]">{m.nome}</h4>
-                        <span className="text-[10px] font-black uppercase text-[#F9B115] bg-[#2B4C7E] px-2 py-0.5 rounded-lg w-fit mx-auto md:mx-0">{m.tipo}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-2">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-[#F9B115]"></div>
-                          <span className="text-xs font-bold uppercase text-gray-500">{m.bloco}</span>
-                        </div>
-                        {m.apto && (
-                          <div className="flex items-center gap-1.5">
-                            <Home size={12} className="text-gray-400" />
-                            <span className="text-xs font-bold text-gray-400">APTO: {m.apto}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5">
-                          <MessageCircle size={12} className="text-green-500" />
-                          <span className="text-xs font-bold text-gray-400">{m.celular}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <CalendarDays size={12} className="text-[#2B4C7E]" />
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">{new Date(m.createdAt).toLocaleDateString('pt-BR')}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 w-full md:w-auto">
-                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="flex-grow md:flex-none p-4 bg-[#25D366] text-white rounded-2xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center"><MessageCircle size={20} /></a>
-                       <button onClick={() => { setMemberIdToDelete(m.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="flex-grow md:flex-none p-4 bg-[#C63D2F]/10 text-[#C63D2F] rounded-2xl hover:bg-[#C63D2F] hover:text-white transition-all flex items-center justify-center"><Trash2 size={20} /></button>
-                    </div>
-                  </div>
-                ))}
-                {filteredMembers.length === 0 && !fetching && (
-                  <div className="text-center py-20 opacity-20">
-                    <Users size={64} className="mx-auto mb-4" />
-                    <p className="font-arena text-2xl">NENHUM FOLIÃO ENCONTRADO</p>
-                  </div>
-                )}
-              </div>
-           </div>
-        )}
-
-        {view === ViewMode.STATISTICS && (
-           <div className="space-y-8 animate-fadeIn pb-24">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="bg-[#2B4C7E] p-3 rounded-2xl"><BarChart3 className="text-white" size={32} /></div>
-                <h2 className="text-3xl font-arena text-[#2B4C7E]">DADOS DA FOLIA</h2>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="arena-card p-8 text-center bg-white">
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Total de Foliões</h3>
-                  <p className="text-7xl font-arena text-[#2B4C7E]">{stats.total}</p>
-                </div>
-                
-                <div className="arena-card p-8 text-center bg-white border-[#F9B115] shadow-[#F9B115]">
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Fotos do Evento</h3>
-                  <p className="text-7xl font-arena text-[#F9B115]">{eventPhotos.length}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="arena-card p-8 bg-white">
-                   <h3 className="font-arena text-2xl mb-6 text-[#2B4C7E] flex items-center gap-2">
-                     <Filter size={20} className="text-[#F9B115]" /> POR BLOCO
-                   </h3>
-                   <div className="space-y-5">
-                      {stats.byBloco.map(([n, c]) => (
-                        <div key={n} className="group">
-                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
-                            <span>{n}</span>
-                            <span className="text-[#2B4C7E]">{c}</span>
-                          </div>
-                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
-                            <div className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-
-                <div className="arena-card p-8 bg-white border-gray-400 shadow-gray-400">
-                   <h3 className="font-arena text-2xl mb-6 text-gray-600 flex items-center gap-2">
-                     <ShieldCheck size={20} className="text-[#F9B115]" /> POR CARGO
-                   </h3>
-                   <div className="space-y-5">
-                      {stats.byCargo.map(([n, c]) => (
-                        <div key={n} className="group">
-                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
-                            <span>{n}</span>
-                            <span className="text-gray-600">{c}</span>
-                          </div>
-                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
-                            <div className="h-full bg-gray-400 rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-              </div>
-           </div>
         )}
       </main>
 
-      {/* MODAL DE VISUALIZAÇÃO AMPLIADA (LIGHTBOX) */}
-      {viewingPhoto && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
-           <div className="flex justify-between items-center p-4 md:p-6 text-white relative z-50">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto ({filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id) + 1} de {filteredMuralPhotos.length})</span>
-                <div className="flex gap-2 mt-2">
-                  <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Download size={14} /> <span className="hidden md:inline">Baixar</span></button>
-                  <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Share2 size={14} /> <span className="hidden md:inline">Enviar</span></button>
-                  <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-red-500 transition-all text-xs font-bold"><Trash2 size={14} /> <span className="hidden md:inline">Deletar</span></button>
-                </div>
-              </div>
-              <button onClick={() => setViewingPhoto(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors"><X size={32} /></button>
-           </div>
-           
-           <div className="flex-grow flex items-center justify-between p-2 md:p-4 relative">
-              {/* Botão Anterior */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
-                className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
-              >
-                <ChevronLeft size={32} />
-              </button>
-
-              <div className="w-full h-full flex items-center justify-center p-4">
-                <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
-              </div>
-
-              {/* Botão Próximo */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
-                className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
-              >
-                <ChevronRight size={32} />
-              </button>
-
-              {/* Controles de Touch/Mobile para navegação rápida (clique nas bordas) */}
-              <div className="md:hidden absolute inset-y-0 left-0 w-1/4 z-40" onClick={() => navigatePhoto('prev')}></div>
-              <div className="md:hidden absolute inset-y-0 right-0 w-1/4 z-40" onClick={() => navigatePhoto('next')}></div>
-           </div>
-
-           <div className="p-4 flex justify-center text-white/30 text-[9px] font-black uppercase tracking-widest z-50">
-             Toque nas laterais para navegar
-           </div>
-        </div>
-      )}
-
-      {/* MODAL DE NOTIFICAÇÃO PERSONALIZADA */}
-      {infoMessage && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] shadow-[12px_12px_0px_#C63D2F] w-full max-w-sm overflow-hidden flex flex-col items-center text-center p-8 animate-slideUp">
-            <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]">
-              <AlertCircle size={48} className="text-[#C63D2F]" />
-            </div>
-            <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight uppercase">Atenção!</h3>
-            <p className="font-bold text-gray-600 mb-8">{infoMessage}</p>
-            <button 
-              onClick={() => setInfoMessage(null)} 
-              className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase"
-            >
-              ENTENDI!
-            </button>
-          </div>
-        </div>
-      )}
-
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-          <div className="arena-card w-full max-sm bg-white p-8 animate-slideUp">
-            <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
-            <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
-              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? `Confirme para excluir ${passwordPurpose === 'DELETE_PHOTOS_BATCH' ? selectedPhotoIds.length : '1'} foto(s)` : 'Digite a senha de administrador'}
-            </p>
+          <div className="arena-card w-full max-w-sm bg-white p-8 animate-slideUp">
+            <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ADMINISTRAÇÃO</h3>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
-              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
-            </div>
+            <button onClick={handleConfirmPassword} className="btn-arena w-full py-3 rounded-xl font-arena text-lg uppercase mt-4">Entrar</button>
+            <button onClick={() => setIsPasswordModalOpen(false)} className="w-full py-3 text-[10px] font-black uppercase text-gray-400 mt-2">Cancelar</button>
           </div>
         </div>
       )}
 
-      <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50 shadow-2xl">
+      {infoMessage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 animate-fadeIn">
+          <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] p-8 text-center max-w-xs w-full">
+            <AlertCircle size={48} className="text-[#C63D2F] mx-auto mb-4" />
+            <p className="font-bold text-gray-600 mb-6">{infoMessage}</p>
+            <button onClick={() => setInfoMessage(null)} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl">OK!</button>
+          </div>
+        </div>
+      )}
+
+      <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
-          <button onClick={() => { setView(ViewMode.STATISTICS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
-          <button onClick={() => { setView(ViewMode.PHOTOS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
+          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center ${view === ViewMode.HOME ? 'text-[#F9B115]' : 'opacity-50'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
+          <button onClick={() => setView(ViewMode.REGISTER)} className={`flex flex-col items-center ${view === ViewMode.REGISTER ? 'text-[#F9B115]' : 'opacity-50'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
+          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center ${view === ViewMode.PHOTOS ? 'text-[#F9B115]' : 'opacity-50'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center ${view === ViewMode.LIST ? 'text-[#F9B115]' : 'opacity-50'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span></button>
         </div>
       </nav>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
-        .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .animate-zoomIn { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-      `}} />
     </div>
   );
 };
