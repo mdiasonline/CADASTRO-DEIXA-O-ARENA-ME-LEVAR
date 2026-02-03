@@ -31,7 +31,8 @@ import {
   ShieldCheck,
   Maximize2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CalendarDays
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -41,6 +42,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [blocoFilter, setBlocoFilter] = useState('');
+  const [cargoFilter, setCargoFilter] = useState('');
   const [isRegistered, setIsRegistered] = useState(false);
   
   // Estados para Busca Facial
@@ -405,6 +408,17 @@ const App: React.FC = () => {
   const blocosDisponiveis = ['BLOCO 1', 'BLOCO 2', 'BLOCO 3', 'BLOCO 4', 'BLOCO 5', 'BLOCO 6', 'BLOCO 7', 'BLOCO 8', 'CONVIDADO'];
   const cargosDisponiveis = ['FOLIÃO', 'ORGANIZADOR', 'DIRETORIA', 'BATERIA', 'APOIO', 'MUSA/MUSO'];
 
+  const filteredMembers = useMemo(() => {
+    return members.filter(m => {
+      const matchesSearch = !searchTerm || 
+        m.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        m.bloco.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesBloco = !blocoFilter || m.bloco === blocoFilter;
+      const matchesCargo = !cargoFilter || m.tipo === cargoFilter;
+      return matchesSearch && matchesBloco && matchesCargo;
+    });
+  }, [members, searchTerm, blocoFilter, cargoFilter]);
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
@@ -656,12 +670,40 @@ const App: React.FC = () => {
 
         {view === ViewMode.LIST && (
            <div className="space-y-6 animate-fadeIn pb-24">
-              <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]">
-                <Search className="text-[#2B4C7E]" />
-                <input placeholder="PESQUISAR POR NOME OU BLOCO..." className="w-full outline-none font-bold text-[#2B4C7E] placeholder:opacity-30" onChange={e => setSearchTerm(e.target.value)} />
+              <div className="flex flex-col gap-4">
+                <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]">
+                  <Search className="text-[#2B4C7E]" />
+                  <input placeholder="PESQUISAR POR NOME OU BLOCO..." className="w-full outline-none font-bold text-[#2B4C7E] placeholder:opacity-30" onChange={e => setSearchTerm(e.target.value)} />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="relative">
+                    <select 
+                      value={blocoFilter} 
+                      onChange={e => setBlocoFilter(e.target.value)}
+                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
+                    >
+                      <option value="">TODOS OS BLOCOS</option>
+                      {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><Filter size={16} /></div>
+                  </div>
+                  <div className="relative">
+                    <select 
+                      value={cargoFilter} 
+                      onChange={e => setCargoFilter(e.target.value)}
+                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
+                    >
+                      <option value="">TODOS OS CARGOS</option>
+                      {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ShieldCheck size={16} /></div>
+                  </div>
+                </div>
               </div>
+
               <div className="grid gap-6">
-                {members.filter(m => m.nome.toLowerCase().includes(searchTerm.toLowerCase()) || m.bloco.toLowerCase().includes(searchTerm.toLowerCase())).map(m => (
+                {filteredMembers.map(m => (
                   <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E]/30 flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#F9B115] transition-colors group">
                     <div className="w-20 h-20 rounded-2xl border-2 border-[#2B4C7E] overflow-hidden shrink-0 shadow-md">
                       {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-4 text-gray-200" />}
@@ -686,6 +728,10 @@ const App: React.FC = () => {
                           <MessageCircle size={12} className="text-green-500" />
                           <span className="text-xs font-bold text-gray-400">{m.celular}</span>
                         </div>
+                        <div className="flex items-center gap-1.5">
+                          <CalendarDays size={12} className="text-[#2B4C7E]" />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">{new Date(m.createdAt).toLocaleDateString('pt-BR')}</span>
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2 w-full md:w-auto">
@@ -694,10 +740,10 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {members.length === 0 && !fetching && (
+                {filteredMembers.length === 0 && !fetching && (
                   <div className="text-center py-20 opacity-20">
                     <Users size={64} className="mx-auto mb-4" />
-                    <p className="font-arena text-2xl">NENHUM FOLIÃO CADASTRADO</p>
+                    <p className="font-arena text-2xl">NENHUM FOLIÃO ENCONTRADO</p>
                   </div>
                 )}
               </div>
@@ -834,7 +880,7 @@ const App: React.FC = () => {
 
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-          <div className="arena-card w-full max-w-sm bg-white p-8 animate-slideUp">
+          <div className="arena-card w-full max-sm bg-white p-8 animate-slideUp">
             <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
               {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? `Confirme para excluir ${passwordPurpose === 'DELETE_PHOTOS_BATCH' ? selectedPhotoIds.length : '1'} foto(s)` : 'Digite a senha de administrador'}
