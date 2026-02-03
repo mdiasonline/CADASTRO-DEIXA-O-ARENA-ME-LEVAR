@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Member, ViewMode, EventPhoto } from './types';
 import { databaseService } from './services/databaseService';
 import { findFaceMatches } from './services/geminiService';
@@ -29,7 +29,9 @@ import {
   CheckCheck,
   AlertCircle,
   ShieldCheck,
-  Maximize2
+  Maximize2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -308,23 +310,29 @@ const App: React.FC = () => {
   const handleDownloadPhoto = async (url?: string, name?: string) => {
     if (!url) return;
 
+    // Detecta se é um navegador móvel ou restrito (Instagram/FB) que suporta Share
+    // No Instagram WebView, downloads diretos via <a> são bloqueados, então tentamos Share.
+    // Se não estiver em ambiente restrito ou Share não for suportado para arquivos, faz download normal.
+    const isRestricted = /Instagram|FBAN|FBAV/i.test(navigator.userAgent);
+
     try {
       const res = await fetch(url);
       const blob = await res.blob();
       const fileName = `folia_${name || Date.now()}.jpg`;
       const file = new File([blob], fileName, { type: 'image/jpeg' });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (isRestricted && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'Foto Carnaval 2026',
         });
-        return;
+        return; // Retorna para evitar disparar o download <a> simultaneamente
       }
     } catch (e) {
-      console.error("Erro ao tentar preparar download via Share:", e);
+      console.warn("Navegador não suporta compartilhamento de arquivo ou erro na preparação:", e);
     }
 
+    // Fallback: Download tradicional apenas se o Share não foi disparado ou não é restrito
     const link = document.createElement('a');
     link.href = url;
     link.download = `folia_${name || Date.now()}.jpg`;
@@ -356,6 +364,32 @@ const App: React.FC = () => {
       }
     } catch (e) { notify("Utilize o botão de Download direto."); }
   };
+
+  const navigatePhoto = useCallback((direction: 'next' | 'prev') => {
+    if (!viewingPhoto) return;
+    const currentIndex = filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id);
+    if (currentIndex === -1) return;
+
+    let nextIndex;
+    if (direction === 'next') {
+      nextIndex = (currentIndex + 1) % filteredMuralPhotos.length;
+    } else {
+      nextIndex = (currentIndex - 1 + filteredMuralPhotos.length) % filteredMuralPhotos.length;
+    }
+    setViewingPhoto(filteredMuralPhotos[nextIndex]);
+  }, [viewingPhoto, filteredMuralPhotos]);
+
+  // Teclas de atalho para navegação
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!viewingPhoto) return;
+      if (e.key === 'ArrowRight') navigatePhoto('next');
+      if (e.key === 'ArrowLeft') navigatePhoto('prev');
+      if (e.key === 'Escape') setViewingPhoto(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewingPhoto, navigatePhoto]);
 
   const stats = useMemo(() => {
     const byBloco: Record<string, number> = {};
@@ -730,18 +764,40 @@ const App: React.FC = () => {
       {/* MODAL DE VISUALIZAÇÃO AMPLIADA (LIGHTBOX) */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn">
-           <div className="flex justify-between items-center p-6 text-white">
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto</span>
+           <div className="flex justify-between items-center p-4 md:p-6 text-white relative z-50">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto ({filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id) + 1} de {filteredMuralPhotos.length})</span>
               <button onClick={() => setViewingPhoto(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors"><X size={32} /></button>
            </div>
            
-           <div className="flex-grow flex items-center justify-center p-4">
-              <img src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
+           <div className="flex-grow flex items-center justify-between p-2 md:p-4 relative">
+              {/* Botão Anterior */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
+                className="absolute left-4 z-50 p-4 bg-white/5 hover:bg-white/20 rounded-full text-white transition-all hidden md:block"
+              >
+                <ChevronLeft size={48} />
+              </button>
+
+              <div className="w-full h-full flex items-center justify-center">
+                <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
+              </div>
+
+              {/* Botão Próximo */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
+                className="absolute right-4 z-50 p-4 bg-white/5 hover:bg-white/20 rounded-full text-white transition-all hidden md:block"
+              >
+                <ChevronRight size={48} />
+              </button>
+
+              {/* Controles de Touch/Mobile para navegação */}
+              <div className="md:hidden absolute inset-y-0 left-0 w-1/4 z-40" onClick={() => navigatePhoto('prev')}></div>
+              <div className="md:hidden absolute inset-y-0 right-0 w-1/4 z-40" onClick={() => navigatePhoto('next')}></div>
            </div>
 
-           <div className="p-8 flex justify-center gap-4 bg-gradient-to-t from-black/50 to-transparent">
+           <div className="p-8 flex flex-wrap justify-center gap-4 bg-gradient-to-t from-black/50 to-transparent z-50">
               <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="flex items-center gap-2 bg-[#F9B115] text-[#2B4C7E] px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
-                <Download size={24} /> Baixar Foto
+                <Download size={24} /> Baixar
               </button>
               <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="flex items-center gap-2 bg-[#25D366] text-white px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
                 <Share2 size={24} /> Enviar
