@@ -22,6 +22,7 @@ export interface Sponsor {
   logo: string;
   atuacao: string;
   telefone: string;
+  descricao?: string;
   createdAt: number;
 }
 

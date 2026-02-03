@@ -37,7 +37,9 @@ import {
   Handshake,
   Store,
   Pencil,
-  Sparkles
+  Sparkles,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -61,6 +63,7 @@ const App: React.FC = () => {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<EventPhoto | null>(null);
+  const [viewingSponsor, setViewingSponsor] = useState<Sponsor | null>(null);
   
   // Estados para Notificação Customizada
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -90,6 +93,7 @@ const App: React.FC = () => {
     nome: '',
     atuacao: '',
     telefone: '',
+    descricao: '',
     logo: ''
   };
 
@@ -207,7 +211,7 @@ const App: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: name === 'celular' ? maskPhone(value) : value }));
   };
 
-  const handleSponsorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSponsorInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setSponsorFormData(prev => ({ ...prev, [name]: name === 'telefone' ? maskPhone(value) : value }));
   };
@@ -449,6 +453,7 @@ const App: React.FC = () => {
             nome: sponsorToEdit.nome,
             atuacao: sponsorToEdit.atuacao,
             telefone: sponsorToEdit.telefone,
+            descricao: sponsorToEdit.descricao || '',
             logo: sponsorToEdit.logo
           });
           setShowSponsorForm(true);
@@ -789,6 +794,16 @@ const App: React.FC = () => {
                         <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
                       </div>
                       <div className="md:col-span-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Descrição / Slogan do Parceiro</label>
+                        <textarea 
+                          name="descricao" 
+                          value={sponsorFormData.descricao} 
+                          onChange={handleSponsorInputChange} 
+                          className={`${inputStyles} h-24 resize-none`} 
+                          placeholder="FALE UM POUCO SOBRE O PARCEIRO OU COLOQUE O SLOGAN..."
+                        ></textarea>
+                      </div>
+                      <div className="md:col-span-2">
                         <button type="submit" disabled={loading || isProcessingLogo} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase flex items-center justify-center gap-2">
                           {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? <><Pencil size={20}/> ATUALIZAR DADOS</> : <><Sparkles size={20}/> SALVAR PARCEIRO</>)}
                         </button>
@@ -802,17 +817,21 @@ const App: React.FC = () => {
               <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4 uppercase">Nossos Apoiadores</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                  {sponsors.map(s => (
-                   <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative overflow-hidden transition-all hover:border-[#C63D2F]">
+                   <div 
+                    key={s.id} 
+                    onClick={() => setViewingSponsor(s)}
+                    className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative overflow-hidden transition-all hover:border-[#C63D2F] cursor-pointer"
+                   >
                      <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                        <button 
-                         onClick={() => { setSponsorIdToEdit(s.id); setPasswordPurpose('EDIT_SPONSOR'); setIsPasswordModalOpen(true); }}
+                         onClick={(e) => { e.stopPropagation(); setSponsorIdToEdit(s.id); setPasswordPurpose('EDIT_SPONSOR'); setIsPasswordModalOpen(true); }}
                          className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-colors"
                          title="Editar"
                        >
                          <Pencil size={14} />
                        </button>
                        <button 
-                         onClick={() => { setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
+                         onClick={(e) => { e.stopPropagation(); setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
                          className="p-1.5 bg-red-50 text-red-600 rounded-lg shadow-sm border border-red-100 hover:bg-red-600 hover:text-white transition-colors"
                          title="Excluir"
                        >
@@ -824,11 +843,10 @@ const App: React.FC = () => {
                      </div>
                      <h4 className="font-arena text-xl text-[#2B4C7E] leading-tight mb-1">{s.nome}</h4>
                      <p className="text-[10px] font-black uppercase text-[#C63D2F] mb-3">{s.atuacao || 'Parceiro Arena'}</p>
-                     {s.telefone && (
-                        <a href={`https://wa.me/55${s.telefone.replace(/\D/g,'')}`} target="_blank" className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-green-500 transition-colors">
-                          <MessageCircle size={14} /> {s.telefone}
-                        </a>
-                     )}
+                     
+                     <div className="flex items-center gap-1.5 text-[9px] font-bold text-gray-400 group-hover:text-[#2B4C7E] transition-colors">
+                        <Info size={12} /> VER DETALHES
+                     </div>
                    </div>
                  ))}
                  {sponsors.length === 0 && (
@@ -1071,9 +1089,49 @@ const App: React.FC = () => {
 
       <footer className="mt-auto py-4 text-center">
         <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
-          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.5
+          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.6
         </p>
       </footer>
+
+      {/* MODAL DETALHES DO PARCEIRO */}
+      {viewingSponsor && (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn" onClick={() => setViewingSponsor(null)}>
+           <div className="arena-card w-full max-w-lg bg-white overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+              <div className="bg-[#2B4C7E] p-6 text-center relative border-b-4 border-[#F9B115]">
+                <button onClick={() => setViewingSponsor(null)} className="absolute top-4 right-4 text-white hover:rotate-90 transition-transform"><X size={28} /></button>
+                <div className="w-32 h-32 mx-auto bg-white rounded-3xl p-4 shadow-xl -mb-16 border-4 border-[#F9B115] flex items-center justify-center">
+                  <img src={viewingSponsor.logo} className="max-w-full max-h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
+                </div>
+              </div>
+              
+              <div className="pt-20 p-8 text-center space-y-4">
+                <div>
+                  <h3 className="font-arena text-3xl text-[#2B4C7E] leading-tight">{viewingSponsor.nome}</h3>
+                  <span className="text-[10px] font-black uppercase text-[#C63D2F] tracking-widest">{viewingSponsor.atuacao}</span>
+                </div>
+                
+                {viewingSponsor.descricao && (
+                  <p className="text-gray-600 font-bold text-sm leading-relaxed px-4 py-4 bg-gray-50 rounded-2xl italic">
+                    "{viewingSponsor.descricao}"
+                  </p>
+                )}
+                
+                <div className="flex flex-col gap-3 pt-4">
+                  {viewingSponsor.telefone && (
+                    <a 
+                      href={`https://wa.me/55${viewingSponsor.telefone.replace(/\D/g,'')}`} 
+                      target="_blank" 
+                      className="btn-arena w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-arena text-xl"
+                    >
+                      <MessageCircle size={24} /> CHAMAR NO WHATSAPP
+                    </a>
+                  )}
+                  <button onClick={() => setViewingSponsor(null)} className="py-3 font-black text-[10px] text-gray-400 uppercase tracking-widest hover:text-[#C63D2F] transition-colors">FECHAR</button>
+                </div>
+              </div>
+           </div>
+        </div>
+      )}
 
       {viewingPhoto && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
