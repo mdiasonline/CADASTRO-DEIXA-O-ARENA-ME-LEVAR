@@ -123,7 +123,7 @@ const App: React.FC = () => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.fillStyle = 'rgba(255,255,255,0)'; // Transparência se o formato suportar
+          ctx.fillStyle = 'rgba(255,255,255,0)';
           ctx.fillRect(0, 0, width, height);
           
           const scaledW = width * scale;
@@ -133,7 +133,7 @@ const App: React.FC = () => {
           
           ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
         }
-        resolve(canvas.toDataURL('image/png', quality)); // PNG para suportar transparência
+        resolve(canvas.toDataURL('image/png', quality));
       };
     });
   };
@@ -235,7 +235,7 @@ const App: React.FC = () => {
         // Iniciar remoção de fundo via Gemini
         const processedLogo = await processLogoBackground(originalBase64);
         setSponsorFormData(prev => ({ ...prev, logo: processedLogo }));
-        setSponsorLogoScale(1.1); // Leve ajuste para preencher o contorno
+        setSponsorLogoScale(1.1);
       };
       reader.readAsDataURL(file);
     }
@@ -366,16 +366,17 @@ const App: React.FC = () => {
     }
     setLoading(true);
     
-    // Processar a imagem final com o zoom aplicado para garantir ajuste ao contorno
+    // Processar a imagem final com o zoom aplicado
     const finalLogo = await compressImage(sponsorFormData.logo, 0.8, 400, sponsorLogoScale);
 
     try {
       if (sponsorIdToEdit) {
+        const originalSponsor = sponsors.find(s => s.id === sponsorIdToEdit);
         const updatedSponsor: Sponsor = {
           ...sponsorFormData,
           id: sponsorIdToEdit,
           logo: finalLogo,
-          createdAt: sponsors.find(s => s.id === sponsorIdToEdit)?.createdAt || Date.now()
+          createdAt: originalSponsor?.createdAt || Date.now()
         };
         await databaseService.updateSponsor(updatedSponsor);
         setSponsors(prev => prev.map(s => s.id === sponsorIdToEdit ? updatedSponsor : s));
@@ -442,15 +443,16 @@ const App: React.FC = () => {
         setShowSponsorForm(true);
         setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'EDIT_SPONSOR' && sponsorIdToEdit) {
-        const sponsor = sponsors.find(s => s.id === sponsorIdToEdit);
-        if (sponsor) {
+        const sponsorToEdit = sponsors.find(s => s.id === sponsorIdToEdit);
+        if (sponsorToEdit) {
           setSponsorFormData({
-            nome: sponsor.nome,
-            atuacao: sponsor.atuacao,
-            telefone: sponsor.telefone,
-            logo: sponsor.logo
+            nome: sponsorToEdit.nome,
+            atuacao: sponsorToEdit.atuacao,
+            telefone: sponsorToEdit.telefone,
+            logo: sponsorToEdit.logo
           });
           setShowSponsorForm(true);
+          setSponsorLogoScale(1);
         }
         setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) {
@@ -468,14 +470,12 @@ const App: React.FC = () => {
     setMemberIdToDelete(null);
     setPhotoIdToDelete(null);
     setSponsorIdToDelete(null);
+    // Nota: sponsorIdToEdit não é limpo aqui para ser usado no preenchimento do form após validação
   };
 
   const handleDownloadPhoto = async (url?: string, name?: string) => {
     if (!url) return;
-
-    // Detecta se é um navegador móvel ou restrito (Instagram/FB) que suporta Share
     const isRestricted = /Instagram|FBAN|FBAV|Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-
     try {
       const res = await fetch(url);
       const blob = await res.blob();
@@ -490,7 +490,7 @@ const App: React.FC = () => {
         return; 
       }
     } catch (e) {
-      console.warn("Navegador não suporta compartilhamento de arquivo ou erro na preparação:", e);
+      console.warn("Navegador não suporta compartilhamento de arquivo:", e);
     }
 
     const link = document.createElement('a');
@@ -658,7 +658,6 @@ const App: React.FC = () => {
                    <p className="text-[9px] font-black text-gray-400 mt-6 uppercase tracking-tighter">Sua foto ajuda a te encontrar no mural!</p>
                  </div>
                  
-                 {/* Campos de Texto */}
                  <div className="space-y-4">
                     <div>
                       <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nome Completo</label>
@@ -722,9 +721,9 @@ const App: React.FC = () => {
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-4">
                     <div className="bg-[#F9E7C7] p-3 rounded-2xl border-2 border-[#C63D2F]"><PlusCircle className="text-[#C63D2F]" size={32} /></div>
-                    <h3 className="text-2xl font-arena text-[#C63D2F] uppercase">{sponsorIdToEdit ? 'EDITAR CADASTRO' : 'NOVO CADASTRO'}</h3>
+                    <h3 className="text-2xl font-arena text-[#C63D2F] uppercase">{sponsorIdToEdit ? 'EDITAR PARCEIRO' : 'NOVO CADASTRO'}</h3>
                   </div>
-                  <button onClick={() => setShowSponsorForm(false)} className="text-gray-400 hover:text-[#C63D2F] transition-colors">
+                  <button onClick={() => { setShowSponsorForm(false); setSponsorIdToEdit(null); setSponsorFormData(defaultSponsorFormData); }} className="text-gray-400 hover:text-[#C63D2F] transition-colors">
                     <X size={28} />
                   </button>
                 </div>
@@ -738,7 +737,7 @@ const App: React.FC = () => {
                         {isProcessingLogo && (
                           <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
                              <Loader2 className="animate-spin text-[#C63D2F] mb-2" size={32} />
-                             <p className="text-[10px] font-black uppercase text-[#C63D2F] animate-pulse">Limpando Fundo...</p>
+                             <p className="text-[10px] font-black uppercase text-[#C63D2F] animate-pulse">Processando Imagem...</p>
                           </div>
                         )}
                         {sponsorFormData.logo ? (
@@ -773,7 +772,6 @@ const App: React.FC = () => {
                             onChange={(e) => setSponsorLogoScale(parseFloat(e.target.value))}
                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#C63D2F]"
                           />
-                          <p className="text-[8px] font-bold text-gray-400 text-center uppercase tracking-tighter italic">O fundo é removido automaticamente para melhor visualização</p>
                         </div>
                       )}
                     </div>
@@ -793,7 +791,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="md:col-span-2">
                         <button type="submit" disabled={loading || isProcessingLogo} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase flex items-center justify-center gap-2">
-                          {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? <><Pencil size={20}/> ATUALIZAR PARCEIRO</> : <><Sparkles size={20}/> SALVAR PARCEIRO</>)}
+                          {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? <><Pencil size={20}/> ATUALIZAR DADOS</> : <><Sparkles size={20}/> SALVAR PARCEIRO</>)}
                         </button>
                       </div>
                     </div>
@@ -802,7 +800,7 @@ const App: React.FC = () => {
             )}
 
             <div className="space-y-6">
-              <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4">NOSSOS APOIADORES</h3>
+              <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4 uppercase">Nossos Apoiadores</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                  {sponsors.map(s => (
                    <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative overflow-hidden transition-all hover:border-[#C63D2F]">
@@ -892,7 +890,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* BARRA DE AÇÕES DE SELEÇÃO EM MASSA */}
               {isSelectionMode && (
                 <div className="flex flex-wrap gap-2 w-full pt-4 border-t-2 border-gray-100 animate-slideUp">
                   <button 
@@ -967,11 +964,6 @@ const App: React.FC = () => {
 
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
-                      {!isSelectionMode && (
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
-                           <Maximize2 className="text-white drop-shadow-lg" size={32} />
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -1052,12 +1044,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {filteredMembers.length === 0 && !fetching && (
-                  <div className="text-center py-20 opacity-20">
-                    <Users size={64} className="mx-auto mb-4" />
-                    <p className="font-arena text-2xl">NENHUM FOLIÃO ENCONTRADO</p>
-                  </div>
-                )}
               </div>
            </div>
         )}
@@ -1080,51 +1066,10 @@ const App: React.FC = () => {
                   <p className="text-7xl font-arena text-[#F9B115]">{eventPhotos.length}</p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="arena-card p-8 bg-white">
-                   <h3 className="font-arena text-2xl mb-6 text-[#2B4C7E] flex items-center gap-2">
-                     <Filter size={20} className="text-[#F9B115]" /> POR BLOCO
-                   </h3>
-                   <div className="space-y-5">
-                      {stats.byBloco.map(([n, c]) => (
-                        <div key={n} className="group">
-                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
-                            <span>{n}</span>
-                            <span className="text-[#2B4C7E]">{c}</span>
-                          </div>
-                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
-                            <div className="h-full bg-[#2B4C7E] rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-
-                <div className="arena-card p-8 bg-white border-gray-400 shadow-gray-400">
-                   <h3 className="font-arena text-2xl mb-6 text-gray-600 flex items-center gap-2">
-                     <ShieldCheck size={20} className="text-[#F9B115]" /> POR CARGO
-                   </h3>
-                   <div className="space-y-5">
-                      {stats.byCargo.map(([n, c]) => (
-                        <div key={n} className="group">
-                          <div className="flex justify-between text-[11px] font-black mb-1.5 uppercase">
-                            <span>{n}</span>
-                            <span className="text-gray-600">{c}</span>
-                          </div>
-                          <div className="h-3 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
-                            <div className="h-full bg-gray-400 rounded-full transition-all duration-1000" style={{width: `${(c/stats.total)*100}%`}}></div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-              </div>
            </div>
         )}
       </main>
 
-      {/* MODAL DE VISUALIZAÇÃO AMPLIADA (LIGHTBOX) */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
            <div className="flex justify-between items-center p-4 md:p-6 text-white relative z-50">
@@ -1140,30 +1085,11 @@ const App: React.FC = () => {
            </div>
            
            <div className="flex-grow flex items-center justify-between p-2 md:p-4 relative">
-              <button 
-                onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
-                className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
-              >
-                <ChevronLeft size={32} />
-              </button>
-
+              <button onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }} className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"><ChevronLeft size={32} /></button>
               <div className="w-full h-full flex items-center justify-center p-4">
                 <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
               </div>
-
-              <button 
-                onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
-                className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
-              >
-                <ChevronRight size={32} />
-              </button>
-
-              <div className="md:hidden absolute inset-y-0 left-0 w-1/4 z-40" onClick={() => navigatePhoto('prev')}></div>
-              <div className="md:hidden absolute inset-y-0 right-0 w-1/4 z-40" onClick={() => navigatePhoto('next')}></div>
-           </div>
-
-           <div className="p-4 flex justify-center text-white/30 text-[9px] font-black uppercase tracking-widest z-50">
-             Toque nas laterais para navegar
+              <button onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }} className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"><ChevronRight size={32} /></button>
            </div>
         </div>
       )}
@@ -1171,17 +1097,10 @@ const App: React.FC = () => {
       {infoMessage && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
           <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] shadow-[12px_12px_0px_#C63D2F] w-full max-w-sm overflow-hidden flex flex-col items-center text-center p-8 animate-slideUp">
-            <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]">
-              <AlertCircle size={48} className="text-[#C63D2F]" />
-            </div>
+            <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]"><AlertCircle size={48} className="text-[#C63D2F]" /></div>
             <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight uppercase">Atenção!</h3>
             <p className="font-bold text-gray-600 mb-8">{infoMessage}</p>
-            <button 
-              onClick={() => setInfoMessage(null)} 
-              className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase"
-            >
-              ENTENDI!
-            </button>
+            <button onClick={() => setInfoMessage(null)} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase">ENTENDI!</button>
           </div>
         </div>
       )}
@@ -1190,9 +1109,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
           <div className="arena-card w-full max-sm bg-white p-8 animate-slideUp">
             <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
-            <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
-              Digite a senha de administrador para continuar
-            </p>
+            <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
               <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
@@ -1204,11 +1121,11 @@ const App: React.FC = () => {
 
       <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50 shadow-2xl">
         <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
-          <button onClick={() => { setView(ViewMode.PHOTOS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
-          <button onClick={() => { setView(ViewMode.SPONSORS); setIsSelectionMode(false); setShowSponsorForm(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
+          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
+          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
+          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
+          <button onClick={() => setView(ViewMode.SPONSORS)} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
         </div>
       </nav>
 
@@ -1220,8 +1137,6 @@ const App: React.FC = () => {
         .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .animate-zoomIn { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-        
-        /* Custom styles for range input */
         input[type=range].accent-[#C63D2F]::-webkit-slider-thumb {
           background: #C63D2F;
           border: 2px solid white;
