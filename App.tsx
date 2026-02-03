@@ -69,6 +69,8 @@ const App: React.FC = () => {
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
   
+  const [showSponsorForm, setShowSponsorForm] = useState(false);
+
   const defaultFormData = {
     nome: '',
     bloco: '', 
@@ -315,6 +317,7 @@ const App: React.FC = () => {
       await databaseService.addSponsor(newSponsor);
       setSponsors(prev => [newSponsor, ...prev]);
       setSponsorFormData(defaultSponsorFormData);
+      setShowSponsorForm(false);
       notify("Parceiro cadastrado com sucesso!");
     } catch (e) {
       notify("Erro ao cadastrar parceiro.");
@@ -358,8 +361,8 @@ const App: React.FC = () => {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'ADD_SPONSOR') {
+        setShowSponsorForm(true);
         setIsPasswordModalOpen(false);
-        // Page view is already Sponsors, just need logic to show form
       } else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) {
         try {
           await databaseService.deleteSponsor(sponsorIdToDelete);
@@ -494,7 +497,6 @@ const App: React.FC = () => {
             className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
             onClick={() => setView(ViewMode.HOME)}
           >
-            {/* LOGOTIPO REMOVIDO CONFORME SOLICITAÇÃO */}
             <div className="flex flex-col text-center">
               <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
                 DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
@@ -611,40 +613,61 @@ const App: React.FC = () => {
 
         {view === ViewMode.SPONSORS && (
           <div className="space-y-10 animate-fadeIn">
-            <div className="arena-card p-8 bg-white border-pink-500 shadow-pink-500">
-               <div className="flex items-center gap-4 mb-6">
-                 <div className="bg-pink-100 p-3 rounded-2xl"><Handshake className="text-pink-500" size={32} /></div>
-                 <h2 className="text-3xl font-arena text-pink-500 uppercase">CADASTRO DE PARCEIRO</h2>
-               </div>
-               
-               <form onSubmit={handleSponsorSubmit} className="space-y-6">
-                  <div className="flex flex-col items-center">
-                    <div 
-                      className="w-32 h-32 border-4 border-pink-500 rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => sponsorLogoInputRef.current?.click()}
-                    >
-                      {sponsorFormData.logo ? (
-                        <img src={sponsorFormData.logo} className="w-full h-full object-contain p-2" />
-                      ) : (
-                        <div className="text-center text-gray-300">
-                          <ImageIcon size={40} className="mx-auto" />
-                          <span className="text-[8px] font-black uppercase">Logo</span>
-                        </div>
-                      )}
-                    </div>
-                    <input type="file" ref={sponsorLogoInputRef} accept="image/*" className="hidden" onChange={handleSponsorLogoChange} />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required name="nome" value={sponsorFormData.nome} onChange={handleSponsorInputChange} className={inputStyles} placeholder="NOME DA EMPRESA" />
-                    <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="ÁREA DE ATUAÇÃO (EX: BEBIDAS)" />
-                    <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="TELEFONE DE CONTATO" />
-                    <button type="submit" disabled={loading} className="btn-arena w-full py-3 rounded-xl font-arena text-xl uppercase bg-pink-500 border-pink-700 shadow-pink-700">
-                      {loading ? <Loader2 className="animate-spin" /> : 'CADASTRAR PARCEIRO'}
-                    </button>
-                  </div>
-               </form>
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <h2 className="text-3xl font-arena text-pink-500 uppercase flex items-center gap-2">
+                <Handshake size={32} /> PARCEIROS
+              </h2>
+              {!showSponsorForm && (
+                <button 
+                  onClick={() => { setPasswordPurpose('ADD_SPONSOR'); setIsPasswordModalOpen(true); }}
+                  className="btn-arena px-6 py-3 rounded-xl font-arena text-lg uppercase flex items-center gap-2 bg-pink-500 border-pink-700 shadow-pink-700"
+                >
+                  <PlusCircle size={20} /> ADICIONAR PARCEIRO
+                </button>
+              )}
             </div>
+
+            {showSponsorForm && (
+              <div className="arena-card p-8 bg-white border-pink-500 shadow-pink-500 animate-slideUp">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-pink-100 p-3 rounded-2xl"><PlusCircle className="text-pink-500" size={32} /></div>
+                    <h3 className="text-2xl font-arena text-pink-500 uppercase">NOVO CADASTRO</h3>
+                  </div>
+                  <button onClick={() => setShowSponsorForm(false)} className="text-gray-400 hover:text-pink-500 transition-colors">
+                    <X size={28} />
+                  </button>
+                </div>
+                
+                <form onSubmit={handleSponsorSubmit} className="space-y-6">
+                    <div className="flex flex-col items-center">
+                      <div 
+                        className="w-32 h-32 border-4 border-pink-500 rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => sponsorLogoInputRef.current?.click()}
+                      >
+                        {sponsorFormData.logo ? (
+                          <img src={sponsorFormData.logo} className="w-full h-full object-contain p-2" />
+                        ) : (
+                          <div className="text-center text-gray-300">
+                            <ImageIcon size={40} className="mx-auto" />
+                            <span className="text-[8px] font-black uppercase">Logo</span>
+                          </div>
+                        )}
+                      </div>
+                      <input type="file" ref={sponsorLogoInputRef} accept="image/*" className="hidden" onChange={handleSponsorLogoChange} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input required name="nome" value={sponsorFormData.nome} onChange={handleSponsorInputChange} className={inputStyles} placeholder="NOME DA EMPRESA" />
+                      <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="ÁREA DE ATUAÇÃO (EX: BEBIDAS)" />
+                      <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="TELEFONE DE CONTATO" />
+                      <button type="submit" disabled={loading} className="btn-arena w-full py-3 rounded-xl font-arena text-xl uppercase bg-pink-500 border-pink-700 shadow-pink-700">
+                        {loading ? <Loader2 className="animate-spin" /> : 'SALVAR PARCEIRO'}
+                      </button>
+                    </div>
+                </form>
+              </div>
+            )}
 
             <div className="space-y-6">
               <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4">NOSSOS APOIADORES</h3>
@@ -672,7 +695,7 @@ const App: React.FC = () => {
                  {sponsors.length === 0 && (
                    <div className="col-span-full py-12 text-center opacity-30">
                      <Store size={48} className="mx-auto mb-2" />
-                     <p className="font-arena text-xl">Seja o primeiro parceiro!</p>
+                     <p className="font-arena text-xl uppercase">Aguardando parceiros...</p>
                    </div>
                  )}
               </div>
@@ -1042,7 +1065,7 @@ const App: React.FC = () => {
           <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
           <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
           <button onClick={() => { setView(ViewMode.PHOTOS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
-          <button onClick={() => { setView(ViewMode.SPONSORS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
+          <button onClick={() => { setView(ViewMode.SPONSORS); setIsSelectionMode(false); setShowSponsorForm(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
           <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
         </div>
       </nav>
