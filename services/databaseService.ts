@@ -11,6 +11,7 @@ interface DBProvider {
   deleteEventPhoto(id: string): Promise<void>;
   getSponsors(): Promise<Sponsor[]>;
   addSponsor(sponsor: Sponsor): Promise<void>;
+  updateSponsor(sponsor: Sponsor): Promise<void>;
   deleteSponsor(id: string): Promise<void>;
   isLocal: boolean;
 }
@@ -50,6 +51,14 @@ const localProvider: DBProvider = {
   async addSponsor(sponsor: Sponsor): Promise<void> {
     const sponsors = await this.getSponsors();
     localStorage.setItem('carnaval_sponsors', JSON.stringify([sponsor, ...sponsors]));
+  },
+  async updateSponsor(sponsor: Sponsor): Promise<void> {
+    const sponsors = await this.getSponsors();
+    const index = sponsors.findIndex(s => s.id === sponsor.id);
+    if (index !== -1) {
+      sponsors[index] = sponsor;
+      localStorage.setItem('carnaval_sponsors', JSON.stringify(sponsors));
+    }
   },
   async deleteSponsor(id: string): Promise<void> {
     const sponsors = await this.getSponsors();
@@ -150,6 +159,13 @@ const getProvider = (): DBProvider => {
         .insert([sponsor]);
       if (error) throw error;
     },
+    async updateSponsor(sponsor: Sponsor): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('patrocinadores')
+        .update(sponsor)
+        .eq('id', sponsor.id);
+      if (error) throw error;
+    },
     async deleteSponsor(id: string): Promise<void> {
       const { error } = await supabaseInstance!
         .from('patrocinadores')
@@ -170,5 +186,6 @@ export const databaseService = {
   deleteEventPhoto: (id: string) => getProvider().deleteEventPhoto(id),
   getSponsors: () => getProvider().getSponsors(),
   addSponsor: (s: Sponsor) => getProvider().addSponsor(s),
+  updateSponsor: (s: Sponsor) => getProvider().updateSponsor(s),
   deleteSponsor: (id: string) => getProvider().deleteSponsor(id)
 };

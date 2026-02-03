@@ -34,7 +34,8 @@ import {
   ChevronRight,
   CalendarDays,
   Handshake,
-  Store
+  Store,
+  Pencil
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -64,12 +65,14 @@ const App: React.FC = () => {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'DELETE_SPONSOR' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
+  const [sponsorIdToEdit, setSponsorIdToEdit] = useState<string | null>(null);
   
   const [showSponsorForm, setShowSponsorForm] = useState(false);
+  const [sponsorLogoScale, setSponsorLogoScale] = useState(1);
 
   const defaultFormData = {
     nome: '',
@@ -100,7 +103,7 @@ const App: React.FC = () => {
     setInfoMessage(msg);
   };
 
-  const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800): Promise<string> => {
+  const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800, scale = 1): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
@@ -112,10 +115,25 @@ const App: React.FC = () => {
           height *= maxWidth / width;
           width = maxWidth;
         }
-        canvas.width = width;
-        canvas.height = height;
+        
+        // Aplicar escala (zoom)
+        const finalWidth = width;
+        const finalHeight = height;
+        
+        canvas.width = finalWidth;
+        canvas.height = finalHeight;
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
+        if (ctx) {
+          ctx.fillStyle = 'white'; // Fundo branco se houver transparência
+          ctx.fillRect(0, 0, finalWidth, finalHeight);
+          
+          const scaledW = finalWidth * scale;
+          const scaledH = finalHeight * scale;
+          const offsetX = (finalWidth - scaledW) / 2;
+          const offsetY = (finalHeight - scaledH) / 2;
+          
+          ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
+        }
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
     });
@@ -177,8 +195,8 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const compressed = await compressImage(reader.result as string, 0.5, 400);
-        setSponsorFormData(prev => ({ ...prev, logo: compressed }));
+        setSponsorFormData(prev => ({ ...prev, logo: reader.result as string }));
+        setSponsorLogoScale(1); // Reseta escala ao trocar foto
       };
       reader.readAsDataURL(file);
     }
@@ -308,19 +326,38 @@ const App: React.FC = () => {
       return;
     }
     setLoading(true);
-    const newSponsor: Sponsor = {
-      id: Math.random().toString(36).substring(7),
-      ...sponsorFormData,
-      createdAt: Date.now()
-    };
+    
+    // Processar a imagem final com o zoom aplicado
+    const finalLogo = await compressImage(sponsorFormData.logo, 0.6, 400, sponsorLogoScale);
+
     try {
-      await databaseService.addSponsor(newSponsor);
-      setSponsors(prev => [newSponsor, ...prev]);
+      if (sponsorIdToEdit) {
+        const updatedSponsor: Sponsor = {
+          ...sponsorFormData,
+          id: sponsorIdToEdit,
+          logo: finalLogo,
+          createdAt: sponsors.find(s => s.id === sponsorIdToEdit)?.createdAt || Date.now()
+        };
+        await databaseService.updateSponsor(updatedSponsor);
+        setSponsors(prev => prev.map(s => s.id === sponsorIdToEdit ? updatedSponsor : s));
+        setSponsorIdToEdit(null);
+        notify("Parceiro atualizado com sucesso!");
+      } else {
+        const newSponsor: Sponsor = {
+          id: Math.random().toString(36).substring(7),
+          ...sponsorFormData,
+          logo: finalLogo,
+          createdAt: Date.now()
+        };
+        await databaseService.addSponsor(newSponsor);
+        setSponsors(prev => [newSponsor, ...prev]);
+        notify("Parceiro cadastrado com sucesso!");
+      }
       setSponsorFormData(defaultSponsorFormData);
       setShowSponsorForm(false);
-      notify("Parceiro cadastrado com sucesso!");
+      setSponsorLogoScale(1);
     } catch (e) {
-      notify("Erro ao cadastrar parceiro.");
+      notify("Erro ao salvar parceiro.");
     } finally {
       setLoading(false);
     }
@@ -361,7 +398,21 @@ const App: React.FC = () => {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'ADD_SPONSOR') {
+        setSponsorIdToEdit(null);
+        setSponsorFormData(defaultSponsorFormData);
         setShowSponsorForm(true);
+        setIsPasswordModalOpen(false);
+      } else if (passwordPurpose === 'EDIT_SPONSOR' && sponsorIdToEdit) {
+        const sponsor = sponsors.find(s => s.id === sponsorIdToEdit);
+        if (sponsor) {
+          setSponsorFormData({
+            nome: sponsor.nome,
+            atuacao: sponsor.atuacao,
+            telefone: sponsor.telefone,
+            logo: sponsor.logo
+          });
+          setShowSponsorForm(true);
+        }
         setIsPasswordModalOpen(false);
       } else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) {
         try {
@@ -523,8 +574,8 @@ const App: React.FC = () => {
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
             </button>
             <button onClick={() => setView(ViewMode.SPONSORS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-pink-500"><Handshake size={40} className="text-pink-500" /></div>
-              <h2 className="text-3xl font-arena text-pink-500">PARCEIROS</h2>
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Handshake size={40} className="text-[#C63D2F]" /></div>
+              <h2 className="text-3xl font-arena text-[#C63D2F]">PARCEIROS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Nossos Patrocinadores</p>
             </button>
             <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
@@ -614,13 +665,13 @@ const App: React.FC = () => {
         {view === ViewMode.SPONSORS && (
           <div className="space-y-10 animate-fadeIn">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <h2 className="text-3xl font-arena text-pink-500 uppercase flex items-center gap-2">
+              <h2 className="text-3xl font-arena text-[#C63D2F] uppercase flex items-center gap-2">
                 <Handshake size={32} /> PARCEIROS
               </h2>
               {!showSponsorForm && (
                 <button 
                   onClick={() => { setPasswordPurpose('ADD_SPONSOR'); setIsPasswordModalOpen(true); }}
-                  className="btn-arena px-6 py-3 rounded-xl font-arena text-lg uppercase flex items-center gap-2 bg-pink-500 border-pink-700 shadow-pink-700"
+                  className="btn-arena px-6 py-3 rounded-xl font-arena text-lg uppercase flex items-center gap-2"
                 >
                   <PlusCircle size={20} /> ADICIONAR PARCEIRO
                 </button>
@@ -628,13 +679,13 @@ const App: React.FC = () => {
             </div>
 
             {showSponsorForm && (
-              <div className="arena-card p-8 bg-white border-pink-500 shadow-pink-500 animate-slideUp">
+              <div className="arena-card p-8 bg-white border-[#C63D2F] shadow-[#C63D2F] animate-slideUp">
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-4">
-                    <div className="bg-pink-100 p-3 rounded-2xl"><PlusCircle className="text-pink-500" size={32} /></div>
-                    <h3 className="text-2xl font-arena text-pink-500 uppercase">NOVO CADASTRO</h3>
+                    <div className="bg-[#F9E7C7] p-3 rounded-2xl border-2 border-[#C63D2F]"><PlusCircle className="text-[#C63D2F]" size={32} /></div>
+                    <h3 className="text-2xl font-arena text-[#C63D2F] uppercase">{sponsorIdToEdit ? 'EDITAR CADASTRO' : 'NOVO CADASTRO'}</h3>
                   </div>
-                  <button onClick={() => setShowSponsorForm(false)} className="text-gray-400 hover:text-pink-500 transition-colors">
+                  <button onClick={() => setShowSponsorForm(false)} className="text-gray-400 hover:text-[#C63D2F] transition-colors">
                     <X size={28} />
                   </button>
                 </div>
@@ -642,28 +693,63 @@ const App: React.FC = () => {
                 <form onSubmit={handleSponsorSubmit} className="space-y-6">
                     <div className="flex flex-col items-center">
                       <div 
-                        className="w-32 h-32 border-4 border-pink-500 rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                        className="w-32 h-32 border-4 border-[#C63D2F] rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors relative"
                         onClick={() => sponsorLogoInputRef.current?.click()}
                       >
                         {sponsorFormData.logo ? (
-                          <img src={sponsorFormData.logo} className="w-full h-full object-contain p-2" />
+                          <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                            <img 
+                              src={sponsorFormData.logo} 
+                              className="max-w-none transition-transform" 
+                              style={{ transform: `scale(${sponsorLogoScale})` }} 
+                              alt="Logo preview" 
+                            />
+                          </div>
                         ) : (
                           <div className="text-center text-gray-300">
                             <ImageIcon size={40} className="mx-auto" />
-                            <span className="text-[8px] font-black uppercase">Logo</span>
+                            <span className="text-[8px] font-black uppercase">Selecionar Logo</span>
                           </div>
                         )}
                       </div>
                       <input type="file" ref={sponsorLogoInputRef} accept="image/*" className="hidden" onChange={handleSponsorLogoChange} />
+                      
+                      {sponsorFormData.logo && (
+                        <div className="w-full max-w-xs mt-4">
+                          <label className="text-[9px] font-black uppercase text-gray-400 flex justify-between">
+                            Ajustar Enquadramento (Zoom) <span>{Math.round(sponsorLogoScale * 100)}%</span>
+                          </label>
+                          <input 
+                            type="range" 
+                            min="0.5" 
+                            max="3" 
+                            step="0.1" 
+                            value={sponsorLogoScale} 
+                            onChange={(e) => setSponsorLogoScale(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#C63D2F]"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input required name="nome" value={sponsorFormData.nome} onChange={handleSponsorInputChange} className={inputStyles} placeholder="NOME DA EMPRESA" />
-                      <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="ÁREA DE ATUAÇÃO (EX: BEBIDAS)" />
-                      <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="TELEFONE DE CONTATO" />
-                      <button type="submit" disabled={loading} className="btn-arena w-full py-3 rounded-xl font-arena text-xl uppercase bg-pink-500 border-pink-700 shadow-pink-700">
-                        {loading ? <Loader2 className="animate-spin" /> : 'SALVAR PARCEIRO'}
-                      </button>
+                      <div className="md:col-span-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nome da Empresa</label>
+                        <input required name="nome" value={sponsorFormData.nome} onChange={handleSponsorInputChange} className={inputStyles} placeholder="NOME DA EMPRESA" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Área de Atuação</label>
+                        <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="EX: BEBIDAS, MODA, ETC" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Telefone WhatsApp</label>
+                        <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase">
+                          {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? 'ATUALIZAR PARCEIRO' : 'SALVAR PARCEIRO')}
+                        </button>
+                      </div>
                     </div>
                 </form>
               </div>
@@ -674,17 +760,27 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                  {sponsors.map(s => (
                    <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative">
-                     <button 
-                       onClick={() => { setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
-                       className="absolute top-2 right-2 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                     >
-                       <Trash2 size={16} />
-                     </button>
+                     <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button 
+                         onClick={() => { setSponsorIdToEdit(s.id); setPasswordPurpose('EDIT_SPONSOR'); setIsPasswordModalOpen(true); }}
+                         className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100"
+                         title="Editar"
+                       >
+                         <Pencil size={14} />
+                       </button>
+                       <button 
+                         onClick={() => { setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
+                         className="p-1.5 bg-red-50 text-red-600 rounded-lg shadow-sm border border-red-100"
+                         title="Excluir"
+                       >
+                         <Trash2 size={14} />
+                       </button>
+                     </div>
                      <div className="w-24 h-24 mb-4 flex items-center justify-center bg-gray-50 rounded-2xl border-2 border-gray-100 overflow-hidden">
                         <img src={s.logo} className="w-full h-full object-contain p-2" alt={s.nome} />
                      </div>
                      <h4 className="font-arena text-xl text-[#2B4C7E] leading-tight mb-1">{s.nome}</h4>
-                     <p className="text-[10px] font-black uppercase text-pink-500 mb-3">{s.atuacao || 'Parceiro'}</p>
+                     <p className="text-[10px] font-black uppercase text-[#C63D2F] mb-3">{s.atuacao || 'Parceiro Oficial'}</p>
                      {s.telefone && (
                         <a href={`https://wa.me/55${s.telefone.replace(/\D/g,'')}`} target="_blank" className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-green-500 transition-colors">
                           <MessageCircle size={14} /> {s.telefone}
@@ -695,7 +791,7 @@ const App: React.FC = () => {
                  {sponsors.length === 0 && (
                    <div className="col-span-full py-12 text-center opacity-30">
                      <Store size={48} className="mx-auto mb-2" />
-                     <p className="font-arena text-xl uppercase">Aguardando parceiros...</p>
+                     <p className="font-arena text-xl uppercase tracking-widest">Aguardando parceiros...</p>
                    </div>
                  )}
               </div>
@@ -1053,7 +1149,7 @@ const App: React.FC = () => {
             </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
@@ -1078,6 +1174,13 @@ const App: React.FC = () => {
         .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .animate-zoomIn { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        
+        /* Custom styles for range input */
+        input[type=range].accent-[#C63D2F]::-webkit-slider-thumb {
+          background: #C63D2F;
+          border: 2px solid white;
+          box-shadow: 2px 2px 0px #2B4C7E;
+        }
       `}} />
     </div>
   );
