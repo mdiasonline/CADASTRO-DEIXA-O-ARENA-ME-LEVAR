@@ -35,6 +35,10 @@ import {
   CalendarDays
 } from 'lucide-react';
 
+// URL DO LOGOTIPO ENVIADO
+// Sugestão: Salve a imagem enviada como 'logo.png' na raiz do projeto
+const LOGO_URL = "https://raw.githubusercontent.com/stackblitz/stackblitz-images/main/carnival-logo-arena.png"; // Placeholder: substitua pelo caminho do seu arquivo local se necessário
+
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.HOME);
   const [members, setMembers] = useState<Member[]>([]);
@@ -421,12 +425,26 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-[#2B4C7E] text-white py-6 md:py-10 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4 text-center flex flex-col items-center">
-          <h1 className="text-3xl md:text-5xl font-arena tracking-tighter cursor-pointer" onClick={() => setView(ViewMode.HOME)}>
-            DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
-          </h1>
-          <div className="mt-2 text-[10px] font-black uppercase tracking-widest opacity-60">Carnaval 2026</div>
+      <header className="bg-[#2B4C7E] text-white py-6 md:py-8 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
+        <div className="container mx-auto px-4 flex flex-col items-center justify-center">
+          <div 
+            className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
+            onClick={() => setView(ViewMode.HOME)}
+          >
+            {/* LOGOTIPO DO BLOCO SEM FUNDO E SEM BORDA */}
+            <div className="w-16 h-16 md:w-24 md:h-24 flex items-center justify-center shrink-0">
+              <img src={LOGO_URL} alt="Logo Bloco Deixa o Arena Me Levar" className="w-full h-full object-contain" />
+            </div>
+            
+            <div className="flex flex-col text-left">
+              <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
+                DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
+              </h1>
+              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1">
+                Carnaval <span className="text-[#F9B115]">2026</span>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
