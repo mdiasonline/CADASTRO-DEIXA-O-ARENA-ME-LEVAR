@@ -136,7 +136,8 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const compressed = await compressImage(reader.result as string);
+        // Reduzindo foto de perfil para 300px com qualidade 0.4 para economizar espaço
+        const compressed = await compressImage(reader.result as string, 0.4, 300);
         setFormData(prev => ({ ...prev, photo: compressed }));
       };
       reader.readAsDataURL(file);
@@ -159,7 +160,8 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
-          const compressed = await compressImage(base64, 0.5, 1000);
+          // Redução agressiva para o mural: 500px de largura e 0.3 de qualidade
+          const compressed = await compressImage(base64, 0.3, 500);
           const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
             url: compressed,
