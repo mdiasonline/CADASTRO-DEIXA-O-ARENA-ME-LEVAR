@@ -136,6 +136,7 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
+        // Reduzindo foto de perfil para 300px com qualidade 0.4 para economizar espaço
         const compressed = await compressImage(reader.result as string, 0.4, 300);
         setFormData(prev => ({ ...prev, photo: compressed }));
       };
@@ -159,6 +160,7 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
+          // Redução agressiva para o mural: 500px de largura e 0.3 de qualidade
           const compressed = await compressImage(base64, 0.3, 500);
           const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
@@ -302,29 +304,8 @@ const App: React.FC = () => {
     setPhotoIdToDelete(null);
   };
 
-  const handleDownloadPhoto = async (url?: string, name?: string) => {
+  const handleDownloadPhoto = (url?: string, name?: string) => {
     if (!url) return;
-
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const fileName = `folia_${name || Date.now()}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
-
-      // Detecta se estamos em um navegador restrito (Instagram/FB/Mobile) e tenta usar Share API
-      // A Share API é a única forma de "baixar" arquivos em WebViews restritas.
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Foto Carnaval 2026',
-        });
-        return;
-      }
-    } catch (e) {
-      console.error("Erro ao tentar preparar download via Share:", e);
-    }
-
-    // Fallback para download tradicional (Browsers normais/Desktop)
     const link = document.createElement('a');
     link.href = url;
     link.download = `folia_${name || Date.now()}.jpg`;
@@ -337,12 +318,10 @@ const App: React.FC = () => {
     selectedPhotoIds.forEach((id, index) => {
       const photo = eventPhotos.find(p => p.id === id);
       if (photo) {
-        // No Instagram, download múltiplo é impossível. 
-        // Em browsers normais, o delay evita bloqueio de múltiplos popups.
-        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 500);
+        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 300);
       }
     });
-    notify(`Iniciando ação de download para ${selectedPhotoIds.length} fotos...`);
+    notify(`Iniciando download de ${selectedPhotoIds.length} fotos...`);
   };
 
   const handleSharePhoto = async (url?: string) => {
