@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Member, ViewMode, EventPhoto, Sponsor } from './types';
 import { databaseService } from './services/databaseService';
 import { findFaceMatches } from './services/geminiService';
+import { GoogleGenAI } from "@google/genai";
 import { 
   Users, 
   UserPlus, 
@@ -35,7 +36,8 @@ import {
   CalendarDays,
   Handshake,
   Store,
-  Pencil
+  Pencil,
+  Sparkles
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -72,6 +74,7 @@ const App: React.FC = () => {
   const [sponsorIdToEdit, setSponsorIdToEdit] = useState<string | null>(null);
   
   const [showSponsorForm, setShowSponsorForm] = useState(false);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
   const [sponsorLogoScale, setSponsorLogoScale] = useState(1);
 
   const defaultFormData = {
@@ -116,27 +119,58 @@ const App: React.FC = () => {
           width = maxWidth;
         }
         
-        // Aplicar escala (zoom)
-        const finalWidth = width;
-        const finalHeight = height;
-        
-        canvas.width = finalWidth;
-        canvas.height = finalHeight;
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.fillStyle = 'white'; // Fundo branco se houver transparência
-          ctx.fillRect(0, 0, finalWidth, finalHeight);
+          ctx.fillStyle = 'rgba(255,255,255,0)'; // Transparência se o formato suportar
+          ctx.fillRect(0, 0, width, height);
           
-          const scaledW = finalWidth * scale;
-          const scaledH = finalHeight * scale;
-          const offsetX = (finalWidth - scaledW) / 2;
-          const offsetY = (finalHeight - scaledH) / 2;
+          const scaledW = width * scale;
+          const scaledH = height * scale;
+          const offsetX = (width - scaledW) / 2;
+          const offsetY = (height - scaledH) / 2;
           
           ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
         }
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        resolve(canvas.toDataURL('image/png', quality)); // PNG para suportar transparência
       };
     });
+  };
+
+  const processLogoBackground = async (base64Data: string): Promise<string> => {
+    setIsProcessingLogo(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Data.split(',')[1],
+                mimeType: 'image/jpeg',
+              },
+            },
+            {
+              text: 'Remove the background of this logo. Keep only the main logo element and crop tightly to its borders. Return the logo on a white background (I will process the transparency later). Ensure the logo is sharp and centered.',
+            },
+          ],
+        },
+      });
+      
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
+      return base64Data;
+    } catch (error) {
+      console.error("Erro ao processar logo:", error);
+      return base64Data;
+    } finally {
+      setIsProcessingLogo(false);
+    }
   };
 
   const loadData = async () => {
@@ -195,8 +229,13 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        setSponsorFormData(prev => ({ ...prev, logo: reader.result as string }));
-        setSponsorLogoScale(1); // Reseta escala ao trocar foto
+        const originalBase64 = reader.result as string;
+        setSponsorFormData(prev => ({ ...prev, logo: originalBase64 }));
+        
+        // Iniciar remoção de fundo via Gemini
+        const processedLogo = await processLogoBackground(originalBase64);
+        setSponsorFormData(prev => ({ ...prev, logo: processedLogo }));
+        setSponsorLogoScale(1.1); // Leve ajuste para preencher o contorno
       };
       reader.readAsDataURL(file);
     }
@@ -327,8 +366,8 @@ const App: React.FC = () => {
     }
     setLoading(true);
     
-    // Processar a imagem final com o zoom aplicado
-    const finalLogo = await compressImage(sponsorFormData.logo, 0.6, 400, sponsorLogoScale);
+    // Processar a imagem final com o zoom aplicado para garantir ajuste ao contorno
+    const finalLogo = await compressImage(sponsorFormData.logo, 0.8, 400, sponsorLogoScale);
 
     try {
       if (sponsorIdToEdit) {
@@ -693,41 +732,48 @@ const App: React.FC = () => {
                 <form onSubmit={handleSponsorSubmit} className="space-y-6">
                     <div className="flex flex-col items-center">
                       <div 
-                        className="w-32 h-32 border-4 border-[#C63D2F] rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors relative"
+                        className="w-48 h-48 border-4 border-[#C63D2F] rounded-3xl overflow-hidden bg-white flex items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors relative"
                         onClick={() => sponsorLogoInputRef.current?.click()}
                       >
+                        {isProcessingLogo && (
+                          <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
+                             <Loader2 className="animate-spin text-[#C63D2F] mb-2" size={32} />
+                             <p className="text-[10px] font-black uppercase text-[#C63D2F] animate-pulse">Limpando Fundo...</p>
+                          </div>
+                        )}
                         {sponsorFormData.logo ? (
-                          <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                          <div className="w-full h-full flex items-center justify-center overflow-hidden p-4">
                             <img 
                               src={sponsorFormData.logo} 
-                              className="max-w-none transition-transform" 
-                              style={{ transform: `scale(${sponsorLogoScale})` }} 
+                              className="max-w-full max-h-full object-contain transition-transform" 
+                              style={{ transform: `scale(${sponsorLogoScale})`, mixBlendMode: 'multiply' }} 
                               alt="Logo preview" 
                             />
                           </div>
                         ) : (
                           <div className="text-center text-gray-300">
-                            <ImageIcon size={40} className="mx-auto" />
+                            <ImageIcon size={48} className="mx-auto mb-2" />
                             <span className="text-[8px] font-black uppercase">Selecionar Logo</span>
                           </div>
                         )}
                       </div>
                       <input type="file" ref={sponsorLogoInputRef} accept="image/*" className="hidden" onChange={handleSponsorLogoChange} />
                       
-                      {sponsorFormData.logo && (
-                        <div className="w-full max-w-xs mt-4">
-                          <label className="text-[9px] font-black uppercase text-gray-400 flex justify-between">
-                            Ajustar Enquadramento (Zoom) <span>{Math.round(sponsorLogoScale * 100)}%</span>
+                      {sponsorFormData.logo && !isProcessingLogo && (
+                        <div className="w-full max-w-xs mt-6 space-y-2">
+                          <label className="text-[10px] font-black uppercase text-gray-400 flex justify-between px-1">
+                            Ajustar Contorno (Zoom) <span>{Math.round(sponsorLogoScale * 100)}%</span>
                           </label>
                           <input 
                             type="range" 
                             min="0.5" 
-                            max="3" 
-                            step="0.1" 
+                            max="2.5" 
+                            step="0.05" 
                             value={sponsorLogoScale} 
                             onChange={(e) => setSponsorLogoScale(parseFloat(e.target.value))}
                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#C63D2F]"
                           />
+                          <p className="text-[8px] font-bold text-gray-400 text-center uppercase tracking-tighter italic">O fundo é removido automaticamente para melhor visualização</p>
                         </div>
                       )}
                     </div>
@@ -739,15 +785,15 @@ const App: React.FC = () => {
                       </div>
                       <div>
                         <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Área de Atuação</label>
-                        <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="EX: BEBIDAS, MODA, ETC" />
+                        <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="EX: BEBIDAS, GASTRONOMIA" />
                       </div>
                       <div>
                         <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Telefone WhatsApp</label>
                         <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="(00) 00000-0000" />
                       </div>
                       <div className="md:col-span-2">
-                        <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase">
-                          {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? 'ATUALIZAR PARCEIRO' : 'SALVAR PARCEIRO')}
+                        <button type="submit" disabled={loading || isProcessingLogo} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase flex items-center justify-center gap-2">
+                          {loading ? <Loader2 className="animate-spin" /> : (sponsorIdToEdit ? <><Pencil size={20}/> ATUALIZAR PARCEIRO</> : <><Sparkles size={20}/> SALVAR PARCEIRO</>)}
                         </button>
                       </div>
                     </div>
@@ -759,28 +805,28 @@ const App: React.FC = () => {
               <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4">NOSSOS APOIADORES</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                  {sponsors.map(s => (
-                   <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative">
-                     <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative overflow-hidden transition-all hover:border-[#C63D2F]">
+                     <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                        <button 
                          onClick={() => { setSponsorIdToEdit(s.id); setPasswordPurpose('EDIT_SPONSOR'); setIsPasswordModalOpen(true); }}
-                         className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100"
+                         className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-colors"
                          title="Editar"
                        >
                          <Pencil size={14} />
                        </button>
                        <button 
                          onClick={() => { setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
-                         className="p-1.5 bg-red-50 text-red-600 rounded-lg shadow-sm border border-red-100"
+                         className="p-1.5 bg-red-50 text-red-600 rounded-lg shadow-sm border border-red-100 hover:bg-red-600 hover:text-white transition-colors"
                          title="Excluir"
                        >
                          <Trash2 size={14} />
                        </button>
                      </div>
-                     <div className="w-24 h-24 mb-4 flex items-center justify-center bg-gray-50 rounded-2xl border-2 border-gray-100 overflow-hidden">
-                        <img src={s.logo} className="w-full h-full object-contain p-2" alt={s.nome} />
+                     <div className="w-32 h-32 mb-4 flex items-center justify-center bg-transparent rounded-2xl overflow-hidden">
+                        <img src={s.logo} className="max-w-full max-h-full object-contain p-2" style={{ mixBlendMode: 'multiply' }} alt={s.nome} />
                      </div>
                      <h4 className="font-arena text-xl text-[#2B4C7E] leading-tight mb-1">{s.nome}</h4>
-                     <p className="text-[10px] font-black uppercase text-[#C63D2F] mb-3">{s.atuacao || 'Parceiro Oficial'}</p>
+                     <p className="text-[10px] font-black uppercase text-[#C63D2F] mb-3">{s.atuacao || 'Parceiro Arena'}</p>
                      {s.telefone && (
                         <a href={`https://wa.me/55${s.telefone.replace(/\D/g,'')}`} target="_blank" className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-green-500 transition-colors">
                           <MessageCircle size={14} /> {s.telefone}
@@ -789,9 +835,9 @@ const App: React.FC = () => {
                    </div>
                  ))}
                  {sponsors.length === 0 && (
-                   <div className="col-span-full py-12 text-center opacity-30">
-                     <Store size={48} className="mx-auto mb-2" />
-                     <p className="font-arena text-xl uppercase tracking-widest">Aguardando parceiros...</p>
+                   <div className="col-span-full py-16 text-center opacity-30">
+                     <Store size={64} className="mx-auto mb-4" />
+                     <p className="font-arena text-2xl uppercase tracking-widest">Nenhum parceiro ainda...</p>
                    </div>
                  )}
               </div>
