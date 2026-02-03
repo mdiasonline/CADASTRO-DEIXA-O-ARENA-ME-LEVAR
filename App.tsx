@@ -28,7 +28,8 @@ import {
   Square,
   CheckCheck,
   AlertCircle,
-  ShieldCheck
+  ShieldCheck,
+  Maximize2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -45,9 +46,10 @@ const App: React.FC = () => {
   const [matchedPhotoIds, setMatchedPhotoIds] = useState<string[] | null>(null);
   const [isFacialSearching, setIsFacialSearching] = useState(false);
 
-  // Estados para Seleção
+  // Estados para Seleção e Visualização
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<EventPhoto | null>(null);
   
   // Estados para Notificação Customizada
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -136,7 +138,6 @@ const App: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        // Reduzindo foto de perfil para 300px com qualidade 0.4 para economizar espaço
         const compressed = await compressImage(reader.result as string, 0.4, 300);
         setFormData(prev => ({ ...prev, photo: compressed }));
       };
@@ -160,7 +161,6 @@ const App: React.FC = () => {
             reader.readAsDataURL(file);
           });
 
-          // Redução agressiva para o mural: 500px de largura e 0.3 de qualidade
           const compressed = await compressImage(base64, 0.3, 500);
           const newPhoto: EventPhoto = {
             id: Math.random().toString(36).substring(7),
@@ -275,6 +275,7 @@ const App: React.FC = () => {
           await databaseService.deleteEventPhoto(photoIdToDelete);
           setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete));
           setIsPasswordModalOpen(false);
+          setViewingPhoto(null);
         } catch (e) { notify("Erro ao excluir a foto."); }
       } else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) {
         try {
@@ -304,8 +305,26 @@ const App: React.FC = () => {
     setPhotoIdToDelete(null);
   };
 
-  const handleDownloadPhoto = (url?: string, name?: string) => {
+  const handleDownloadPhoto = async (url?: string, name?: string) => {
     if (!url) return;
+
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const fileName = `folia_${name || Date.now()}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Foto Carnaval 2026',
+        });
+        return;
+      }
+    } catch (e) {
+      console.error("Erro ao tentar preparar download via Share:", e);
+    }
+
     const link = document.createElement('a');
     link.href = url;
     link.download = `folia_${name || Date.now()}.jpg`;
@@ -318,10 +337,10 @@ const App: React.FC = () => {
     selectedPhotoIds.forEach((id, index) => {
       const photo = eventPhotos.find(p => p.id === id);
       if (photo) {
-        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 300);
+        setTimeout(() => handleDownloadPhoto(photo.url, photo.id), index * 500);
       }
     });
-    notify(`Iniciando download de ${selectedPhotoIds.length} fotos...`);
+    notify(`Iniciando ação de download para ${selectedPhotoIds.length} fotos...`);
   };
 
   const handleSharePhoto = async (url?: string) => {
@@ -564,7 +583,7 @@ const App: React.FC = () => {
                 {filteredMuralPhotos.map(p => (
                   <div 
                     key={p.id} 
-                    onClick={() => isSelectionMode && togglePhotoSelection(p.id)}
+                    onClick={() => isSelectionMode ? togglePhotoSelection(p.id) : setViewingPhoto(p)}
                     className={`arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative cursor-pointer ${isSelectionMode && selectedPhotoIds.includes(p.id) ? 'border-[#F9B115] ring-4 ring-[#F9B115]/30' : ''}`}
                   >
                     {isSelectionMode && (
@@ -584,16 +603,8 @@ const App: React.FC = () => {
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       {!isSelectionMode && (
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
-                          <div className="flex gap-4">
-                            <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-3 bg-white text-[#2B4C7E] rounded-full hover:scale-110 transition-transform"><Download size={24} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleSharePhoto(p.url); }} className="p-3 bg-[#25D366] text-white rounded-full hover:scale-110 transition-transform"><Share2 size={24} /></button>
-                          </div>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} 
-                            className="p-3 bg-[#C63D2F] text-white rounded-full hover:scale-110 transition-transform"
-                          >
-                            <Trash2 size={24} />
-                          </button>
+                           <Maximize2 className="text-white" size={32} />
+                           <span className="text-white font-black text-[10px] uppercase">Ver Maior</span>
                         </div>
                       )}
                     </div>
@@ -716,6 +727,32 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* MODAL DE VISUALIZAÇÃO AMPLIADA (LIGHTBOX) */}
+      {viewingPhoto && (
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn">
+           <div className="flex justify-between items-center p-6 text-white">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto</span>
+              <button onClick={() => setViewingPhoto(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors"><X size={32} /></button>
+           </div>
+           
+           <div className="flex-grow flex items-center justify-center p-4">
+              <img src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
+           </div>
+
+           <div className="p-8 flex justify-center gap-4 bg-gradient-to-t from-black/50 to-transparent">
+              <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="flex items-center gap-2 bg-[#F9B115] text-[#2B4C7E] px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
+                <Download size={24} /> Baixar Foto
+              </button>
+              <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="flex items-center gap-2 bg-[#25D366] text-white px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
+                <Share2 size={24} /> Enviar
+              </button>
+              <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-4 bg-[#C63D2F] text-white rounded-2xl shadow-lg hover:scale-105 transition-transform">
+                <Trash2 size={24} />
+              </button>
+           </div>
+        </div>
+      )}
+
       {/* MODAL DE NOTIFICAÇÃO PERSONALIZADA */}
       {infoMessage && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
@@ -764,8 +801,10 @@ const App: React.FC = () => {
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
         .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .animate-zoomIn { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
       `}} />
     </div>
