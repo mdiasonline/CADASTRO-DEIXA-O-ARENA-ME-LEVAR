@@ -16,10 +16,20 @@ export interface EventPhoto {
   createdAt: number;
 }
 
+export interface Sponsor {
+  id: string;
+  nome: string;
+  logo: string;
+  atuacao: string;
+  telefone: string;
+  createdAt: number;
+}
+
 export enum ViewMode {
   HOME = 'HOME',
   REGISTER = 'REGISTER',
   LIST = 'LIST',
   STATISTICS = 'STATISTICS',
-  PHOTOS = 'PHOTOS'
+  PHOTOS = 'PHOTOS',
+  SPONSORS = 'SPONSORS'
 }

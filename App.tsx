@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Member, ViewMode, EventPhoto } from './types';
+import { Member, ViewMode, EventPhoto, Sponsor } from './types';
 import { databaseService } from './services/databaseService';
 import { findFaceMatches } from './services/geminiService';
 import { 
@@ -32,17 +32,16 @@ import {
   Maximize2,
   ChevronLeft,
   ChevronRight,
-  CalendarDays
+  CalendarDays,
+  Handshake,
+  Store
 } from 'lucide-react';
-
-// URL DO LOGOTIPO ENVIADO
-// Sugestão: Salve a imagem enviada como 'logo.png' na raiz do projeto
-const LOGO_URL = "https://raw.githubusercontent.com/stackblitz/stackblitz-images/main/carnival-logo-arena.png"; // Placeholder: substitua pelo caminho do seu arquivo local se necessário
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.HOME);
   const [members, setMembers] = useState<Member[]>([]);
   const [eventPhotos, setEventPhotos] = useState<EventPhoto[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,9 +64,10 @@ const App: React.FC = () => {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'DELETE_SPONSOR' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
+  const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
   
   const defaultFormData = {
     nome: '',
@@ -78,12 +78,21 @@ const App: React.FC = () => {
     photo: '' as string | undefined
   };
 
+  const defaultSponsorFormData = {
+    nome: '',
+    atuacao: '',
+    telefone: '',
+    logo: ''
+  };
+
   const [formData, setFormData] = useState(defaultFormData);
+  const [sponsorFormData, setSponsorFormData] = useState(defaultSponsorFormData);
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
+  const sponsorLogoInputRef = useRef<HTMLInputElement>(null);
 
   const notify = (msg: string) => {
     setInfoMessage(msg);
@@ -113,12 +122,14 @@ const App: React.FC = () => {
   const loadData = async () => {
     setFetching(true);
     try {
-      const [membersData, photosData] = await Promise.all([
+      const [membersData, photosData, sponsorsData] = await Promise.all([
         databaseService.getMembers(),
-        databaseService.getEventPhotos()
+        databaseService.getEventPhotos(),
+        databaseService.getSponsors()
       ]);
       setMembers(membersData || []);
       setEventPhotos(photosData || []);
+      setSponsors(sponsorsData || []);
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
     } finally {
@@ -142,6 +153,11 @@ const App: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: name === 'celular' ? maskPhone(value) : value }));
   };
 
+  const handleSponsorInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setSponsorFormData(prev => ({ ...prev, [name]: name === 'telefone' ? maskPhone(value) : value }));
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -149,6 +165,18 @@ const App: React.FC = () => {
       reader.onloadend = async () => {
         const compressed = await compressImage(reader.result as string, 0.4, 300);
         setFormData(prev => ({ ...prev, photo: compressed }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSponsorLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result as string, 0.5, 400);
+        setSponsorFormData(prev => ({ ...prev, logo: compressed }));
       };
       reader.readAsDataURL(file);
     }
@@ -271,6 +299,30 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSponsorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sponsorFormData.nome || !sponsorFormData.logo) {
+      notify("Preencha pelo menos o Nome e o Logo do parceiro!");
+      return;
+    }
+    setLoading(true);
+    const newSponsor: Sponsor = {
+      id: Math.random().toString(36).substring(7),
+      ...sponsorFormData,
+      createdAt: Date.now()
+    };
+    try {
+      await databaseService.addSponsor(newSponsor);
+      setSponsors(prev => [newSponsor, ...prev]);
+      setSponsorFormData(defaultSponsorFormData);
+      notify("Parceiro cadastrado com sucesso!");
+    } catch (e) {
+      notify("Erro ao cadastrar parceiro.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
       if (passwordPurpose === 'DELETE' && memberIdToDelete) {
@@ -305,6 +357,16 @@ const App: React.FC = () => {
       } else if (passwordPurpose === 'VIEW_STATS') {
         setView(ViewMode.STATISTICS);
         setIsPasswordModalOpen(false);
+      } else if (passwordPurpose === 'ADD_SPONSOR') {
+        setIsPasswordModalOpen(false);
+        // Page view is already Sponsors, just need logic to show form
+      } else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) {
+        try {
+          await databaseService.deleteSponsor(sponsorIdToDelete);
+          setSponsors(prev => prev.filter(s => s.id !== sponsorIdToDelete));
+          setIsPasswordModalOpen(false);
+          notify("Parceiro removido.");
+        } catch (e) { notify("Erro ao remover parceiro."); }
       }
     } else { 
       notify('SENHA INCORRETA!'); 
@@ -312,6 +374,7 @@ const App: React.FC = () => {
     setPasswordInput('');
     setMemberIdToDelete(null);
     setPhotoIdToDelete(null);
+    setSponsorIdToDelete(null);
   };
 
   const handleDownloadPhoto = async (url?: string, name?: string) => {
@@ -431,12 +494,8 @@ const App: React.FC = () => {
             className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
             onClick={() => setView(ViewMode.HOME)}
           >
-            {/* LOGOTIPO DO BLOCO SEM FUNDO E SEM BORDA */}
-            <div className="w-16 h-16 md:w-24 md:h-24 flex items-center justify-center shrink-0">
-              <img src={LOGO_URL} alt="Logo Bloco Deixa o Arena Me Levar" className="w-full h-full object-contain" />
-            </div>
-            
-            <div className="flex flex-col text-left">
+            {/* LOGOTIPO REMOVIDO CONFORME SOLICITAÇÃO */}
+            <div className="flex flex-col text-center">
               <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
                 DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
               </h1>
@@ -461,10 +520,10 @@ const App: React.FC = () => {
               <h2 className="text-3xl font-arena text-[#F9B115]">MURAL DE FOTOS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Público - Veja e Poste!</p>
             </button>
-            <button onClick={() => { setView(ViewMode.STATISTICS); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
-              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-gray-400"><BarChart3 size={40} className="text-gray-500" /></div>
-              <h2 className="text-3xl font-arena text-gray-500">ESTATÍSTICAS</h2>
-              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados em tempo real</p>
+            <button onClick={() => setView(ViewMode.SPONSORS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-pink-500"><Handshake size={40} className="text-pink-500" /></div>
+              <h2 className="text-3xl font-arena text-pink-500">PARCEIROS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Nossos Patrocinadores</p>
             </button>
             <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Users size={40} className="text-[#C63D2F]" /></div>
@@ -547,6 +606,77 @@ const App: React.FC = () => {
                  </button>
                </form>
              )}
+          </div>
+        )}
+
+        {view === ViewMode.SPONSORS && (
+          <div className="space-y-10 animate-fadeIn">
+            <div className="arena-card p-8 bg-white border-pink-500 shadow-pink-500">
+               <div className="flex items-center gap-4 mb-6">
+                 <div className="bg-pink-100 p-3 rounded-2xl"><Handshake className="text-pink-500" size={32} /></div>
+                 <h2 className="text-3xl font-arena text-pink-500 uppercase">CADASTRO DE PARCEIRO</h2>
+               </div>
+               
+               <form onSubmit={handleSponsorSubmit} className="space-y-6">
+                  <div className="flex flex-col items-center">
+                    <div 
+                      className="w-32 h-32 border-4 border-pink-500 rounded-3xl overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => sponsorLogoInputRef.current?.click()}
+                    >
+                      {sponsorFormData.logo ? (
+                        <img src={sponsorFormData.logo} className="w-full h-full object-contain p-2" />
+                      ) : (
+                        <div className="text-center text-gray-300">
+                          <ImageIcon size={40} className="mx-auto" />
+                          <span className="text-[8px] font-black uppercase">Logo</span>
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" ref={sponsorLogoInputRef} accept="image/*" className="hidden" onChange={handleSponsorLogoChange} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input required name="nome" value={sponsorFormData.nome} onChange={handleSponsorInputChange} className={inputStyles} placeholder="NOME DA EMPRESA" />
+                    <input name="atuacao" value={sponsorFormData.atuacao} onChange={handleSponsorInputChange} className={inputStyles} placeholder="ÁREA DE ATUAÇÃO (EX: BEBIDAS)" />
+                    <input name="telefone" value={sponsorFormData.telefone} onChange={handleSponsorInputChange} className={inputStyles} placeholder="TELEFONE DE CONTATO" />
+                    <button type="submit" disabled={loading} className="btn-arena w-full py-3 rounded-xl font-arena text-xl uppercase bg-pink-500 border-pink-700 shadow-pink-700">
+                      {loading ? <Loader2 className="animate-spin" /> : 'CADASTRAR PARCEIRO'}
+                    </button>
+                  </div>
+               </form>
+            </div>
+
+            <div className="space-y-6">
+              <h3 className="text-2xl font-arena text-[#2B4C7E] border-b-4 border-[#F9B115] w-fit pr-4">NOSSOS APOIADORES</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                 {sponsors.map(s => (
+                   <div key={s.id} className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative">
+                     <button 
+                       onClick={() => { setSponsorIdToDelete(s.id); setPasswordPurpose('DELETE_SPONSOR'); setIsPasswordModalOpen(true); }}
+                       className="absolute top-2 right-2 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       <Trash2 size={16} />
+                     </button>
+                     <div className="w-24 h-24 mb-4 flex items-center justify-center bg-gray-50 rounded-2xl border-2 border-gray-100 overflow-hidden">
+                        <img src={s.logo} className="w-full h-full object-contain p-2" alt={s.nome} />
+                     </div>
+                     <h4 className="font-arena text-xl text-[#2B4C7E] leading-tight mb-1">{s.nome}</h4>
+                     <p className="text-[10px] font-black uppercase text-pink-500 mb-3">{s.atuacao || 'Parceiro'}</p>
+                     {s.telefone && (
+                        <a href={`https://wa.me/55${s.telefone.replace(/\D/g,'')}`} target="_blank" className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-green-500 transition-colors">
+                          <MessageCircle size={14} /> {s.telefone}
+                        </a>
+                     )}
+                   </div>
+                 ))}
+                 {sponsors.length === 0 && (
+                   <div className="col-span-full py-12 text-center opacity-30">
+                     <Store size={48} className="mx-auto mb-2" />
+                     <p className="font-arena text-xl">Seja o primeiro parceiro!</p>
+                   </div>
+                 )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -662,7 +792,6 @@ const App: React.FC = () => {
                       </div>
                     )}
                     
-                    {/* Botões rápidos no topo direito de cada foto no mural */}
                     {!isSelectionMode && (
                       <div className="absolute top-2 right-2 z-30 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-2 bg-white/90 text-[#2B4C7E] rounded-lg shadow-sm backdrop-blur-sm border border-[#2B4C7E]/20"><Download size={14} /></button>
@@ -846,7 +975,6 @@ const App: React.FC = () => {
            </div>
            
            <div className="flex-grow flex items-center justify-between p-2 md:p-4 relative">
-              {/* Botão Anterior */}
               <button 
                 onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
                 className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
@@ -858,7 +986,6 @@ const App: React.FC = () => {
                 <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
               </div>
 
-              {/* Botão Próximo */}
               <button 
                 onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
                 className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
@@ -866,7 +993,6 @@ const App: React.FC = () => {
                 <ChevronRight size={32} />
               </button>
 
-              {/* Controles de Touch/Mobile para navegação rápida (clique nas bordas) */}
               <div className="md:hidden absolute inset-y-0 left-0 w-1/4 z-40" onClick={() => navigatePhoto('prev')}></div>
               <div className="md:hidden absolute inset-y-0 right-0 w-1/4 z-40" onClick={() => navigatePhoto('next')}></div>
            </div>
@@ -877,7 +1003,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE NOTIFICAÇÃO PERSONALIZADA */}
       {infoMessage && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
           <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] shadow-[12px_12px_0px_#C63D2F] w-full max-w-sm overflow-hidden flex flex-col items-center text-center p-8 animate-slideUp">
@@ -901,11 +1026,11 @@ const App: React.FC = () => {
           <div className="arena-card w-full max-sm bg-white p-8 animate-slideUp">
             <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">
-              {passwordPurpose === 'DELETE_PHOTO' || passwordPurpose === 'DELETE_PHOTOS_BATCH' ? `Confirme para excluir ${passwordPurpose === 'DELETE_PHOTOS_BATCH' ? selectedPhotoIds.length : '1'} foto(s)` : 'Digite a senha de administrador'}
+              Digite a senha de administrador para continuar
             </p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
@@ -916,8 +1041,8 @@ const App: React.FC = () => {
         <div className="max-w-md mx-auto flex justify-around text-white">
           <button onClick={() => { setView(ViewMode.HOME); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
           <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
-          <button onClick={() => { setView(ViewMode.STATISTICS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
           <button onClick={() => { setView(ViewMode.PHOTOS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
+          <button onClick={() => { setView(ViewMode.SPONSORS); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
           <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); setIsSelectionMode(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
         </div>
       </nav>

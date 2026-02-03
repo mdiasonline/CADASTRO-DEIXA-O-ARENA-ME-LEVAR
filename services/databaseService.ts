@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Member, EventPhoto } from "../types";
+import { Member, EventPhoto, Sponsor } from "../types";
 
 interface DBProvider {
   getMembers(): Promise<Member[]>;
@@ -9,6 +9,9 @@ interface DBProvider {
   getEventPhotos(): Promise<EventPhoto[]>;
   addEventPhoto(photo: EventPhoto): Promise<void>;
   deleteEventPhoto(id: string): Promise<void>;
+  getSponsors(): Promise<Sponsor[]>;
+  addSponsor(sponsor: Sponsor): Promise<void>;
+  deleteSponsor(id: string): Promise<void>;
   isLocal: boolean;
 }
 
@@ -39,6 +42,19 @@ const localProvider: DBProvider = {
     const photos = await this.getEventPhotos();
     const filtered = photos.filter(p => p.id !== id);
     localStorage.setItem('carnaval_event_photos', JSON.stringify(filtered));
+  },
+  async getSponsors(): Promise<Sponsor[]> {
+    const data = localStorage.getItem('carnaval_sponsors');
+    return data ? JSON.parse(data) : [];
+  },
+  async addSponsor(sponsor: Sponsor): Promise<void> {
+    const sponsors = await this.getSponsors();
+    localStorage.setItem('carnaval_sponsors', JSON.stringify([sponsor, ...sponsors]));
+  },
+  async deleteSponsor(id: string): Promise<void> {
+    const sponsors = await this.getSponsors();
+    const filtered = sponsors.filter(s => s.id !== id);
+    localStorage.setItem('carnaval_sponsors', JSON.stringify(filtered));
   }
 };
 
@@ -116,6 +132,30 @@ const getProvider = (): DBProvider => {
         .delete()
         .eq('id', id);
       if (error) throw error;
+    },
+    async getSponsors(): Promise<Sponsor[]> {
+      const { data, error } = await supabaseInstance!
+        .from('patrocinadores')
+        .select('*')
+        .order('createdAt', { ascending: false });
+      if (error) {
+        console.error("Erro Supabase Patrocinadores:", error);
+        return [];
+      }
+      return (data as Sponsor[]) || [];
+    },
+    async addSponsor(sponsor: Sponsor): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('patrocinadores')
+        .insert([sponsor]);
+      if (error) throw error;
+    },
+    async deleteSponsor(id: string): Promise<void> {
+      const { error } = await supabaseInstance!
+        .from('patrocinadores')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
     }
   };
 };
@@ -127,5 +167,8 @@ export const databaseService = {
   deleteMember: (id: string) => getProvider().deleteMember(id),
   getEventPhotos: () => getProvider().getEventPhotos(),
   addEventPhoto: (p: EventPhoto) => getProvider().addEventPhoto(p),
-  deleteEventPhoto: (id: string) => getProvider().deleteEventPhoto(id)
+  deleteEventPhoto: (id: string) => getProvider().deleteEventPhoto(id),
+  getSponsors: () => getProvider().getSponsors(),
+  addSponsor: (s: Sponsor) => getProvider().addSponsor(s),
+  deleteSponsor: (id: string) => getProvider().deleteSponsor(id)
 };
