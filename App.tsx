@@ -311,9 +311,7 @@ const App: React.FC = () => {
     if (!url) return;
 
     // Detecta se é um navegador móvel ou restrito (Instagram/FB) que suporta Share
-    // No Instagram WebView, downloads diretos via <a> são bloqueados, então tentamos Share.
-    // Se não estiver em ambiente restrito ou Share não for suportado para arquivos, faz download normal.
-    const isRestricted = /Instagram|FBAN|FBAV/i.test(navigator.userAgent);
+    const isRestricted = /Instagram|FBAN|FBAV|Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
 
     try {
       const res = await fetch(url);
@@ -326,13 +324,12 @@ const App: React.FC = () => {
           files: [file],
           title: 'Foto Carnaval 2026',
         });
-        return; // Retorna para evitar disparar o download <a> simultaneamente
+        return; 
       }
     } catch (e) {
       console.warn("Navegador não suporta compartilhamento de arquivo ou erro na preparação:", e);
     }
 
-    // Fallback: Download tradicional apenas se o Share não foi disparado ou não é restrito
     const link = document.createElement('a');
     link.href = url;
     link.download = `folia_${name || Date.now()}.jpg`;
@@ -379,7 +376,6 @@ const App: React.FC = () => {
     setViewingPhoto(filteredMuralPhotos[nextIndex]);
   }, [viewingPhoto, filteredMuralPhotos]);
 
-  // Teclas de atalho para navegação
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!viewingPhoto) return;
@@ -633,12 +629,21 @@ const App: React.FC = () => {
                         )}
                       </div>
                     )}
+                    
+                    {/* Botões rápidos no topo direito de cada foto no mural */}
+                    {!isSelectionMode && (
+                      <div className="absolute top-2 right-2 z-30 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-2 bg-white/90 text-[#2B4C7E] rounded-lg shadow-sm backdrop-blur-sm border border-[#2B4C7E]/20"><Download size={14} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSharePhoto(p.url); }} className="p-2 bg-[#25D366]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#25D366]/20"><Share2 size={14} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-[#C63D2F]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#C63D2F]/20"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+
                     <div className="aspect-square relative">
                       <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
                       {!isSelectionMode && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
-                           <Maximize2 className="text-white" size={32} />
-                           <span className="text-white font-black text-[10px] uppercase">Ver Maior</span>
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
+                           <Maximize2 className="text-white drop-shadow-lg" size={32} />
                         </div>
                       )}
                     </div>
@@ -763,9 +768,16 @@ const App: React.FC = () => {
 
       {/* MODAL DE VISUALIZAÇÃO AMPLIADA (LIGHTBOX) */}
       {viewingPhoto && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn">
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
            <div className="flex justify-between items-center p-4 md:p-6 text-white relative z-50">
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto ({filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id) + 1} de {filteredMuralPhotos.length})</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto ({filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id) + 1} de {filteredMuralPhotos.length})</span>
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Download size={14} /> <span className="hidden md:inline">Baixar</span></button>
+                  <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Share2 size={14} /> <span className="hidden md:inline">Enviar</span></button>
+                  <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-red-500 transition-all text-xs font-bold"><Trash2 size={14} /> <span className="hidden md:inline">Deletar</span></button>
+                </div>
+              </div>
               <button onClick={() => setViewingPhoto(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors"><X size={32} /></button>
            </div>
            
@@ -773,38 +785,30 @@ const App: React.FC = () => {
               {/* Botão Anterior */}
               <button 
                 onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }}
-                className="absolute left-4 z-50 p-4 bg-white/5 hover:bg-white/20 rounded-full text-white transition-all hidden md:block"
+                className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
               >
-                <ChevronLeft size={48} />
+                <ChevronLeft size={32} />
               </button>
 
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center p-4">
                 <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
               </div>
 
               {/* Botão Próximo */}
               <button 
                 onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }}
-                className="absolute right-4 z-50 p-4 bg-white/5 hover:bg-white/20 rounded-full text-white transition-all hidden md:block"
+                className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"
               >
-                <ChevronRight size={48} />
+                <ChevronRight size={32} />
               </button>
 
-              {/* Controles de Touch/Mobile para navegação */}
+              {/* Controles de Touch/Mobile para navegação rápida (clique nas bordas) */}
               <div className="md:hidden absolute inset-y-0 left-0 w-1/4 z-40" onClick={() => navigatePhoto('prev')}></div>
               <div className="md:hidden absolute inset-y-0 right-0 w-1/4 z-40" onClick={() => navigatePhoto('next')}></div>
            </div>
 
-           <div className="p-8 flex flex-wrap justify-center gap-4 bg-gradient-to-t from-black/50 to-transparent z-50">
-              <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="flex items-center gap-2 bg-[#F9B115] text-[#2B4C7E] px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
-                <Download size={24} /> Baixar
-              </button>
-              <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="flex items-center gap-2 bg-[#25D366] text-white px-8 py-4 rounded-2xl font-arena text-xl uppercase shadow-lg hover:scale-105 transition-transform">
-                <Share2 size={24} /> Enviar
-              </button>
-              <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-4 bg-[#C63D2F] text-white rounded-2xl shadow-lg hover:scale-105 transition-transform">
-                <Trash2 size={24} />
-              </button>
+           <div className="p-4 flex justify-center text-white/30 text-[9px] font-black uppercase tracking-widest z-50">
+             Toque nas laterais para navegar
            </div>
         </div>
       )}
