@@ -160,10 +160,13 @@ const getProvider = (): DBProvider => {
       if (error) throw error;
     },
     async updateSponsor(sponsor: Sponsor): Promise<void> {
+      // O Supabase pode falhar ao tentar atualizar a própria coluna ID, mesmo que o valor seja o mesmo.
+      // Removemos o ID do corpo do objeto enviado para .update()
+      const { id, ...dataToUpdate } = sponsor;
       const { error } = await supabaseInstance!
         .from('patrocinadores')
-        .update(sponsor)
-        .eq('id', sponsor.id);
+        .update(dataToUpdate)
+        .eq('id', id);
       if (error) throw error;
     },
     async deleteSponsor(id: string): Promise<void> {

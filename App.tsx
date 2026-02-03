@@ -401,7 +401,8 @@ const App: React.FC = () => {
       setShowSponsorForm(false);
       setSponsorLogoScale(1);
     } catch (e) {
-      notify("Erro ao salvar parceiro.");
+      console.error("Erro ao salvar parceiro:", e);
+      notify("Erro ao salvar parceiro. Verifique sua conexão.");
     } finally {
       setLoading(false);
     }
@@ -1089,7 +1090,7 @@ const App: React.FC = () => {
 
       <footer className="mt-auto py-4 text-center">
         <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
-          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.6
+          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.7
         </p>
       </footer>
 
