@@ -13,7 +13,7 @@ interface DBProvider {
   addSponsor(sponsor: Sponsor): Promise<void>;
   updateSponsor(sponsor: Sponsor): Promise<void>;
   deleteSponsor(id: string): Promise<void>;
-  // Auth & User Admin
+  // Métodos de Usuário
   getUsers(): Promise<AppUser[]>;
   addUser(user: AppUser): Promise<void>;
   updateUser(user: AppUser): Promise<void>;
@@ -70,7 +70,7 @@ const localProvider: DBProvider = {
     const filtered = sponsors.filter(s => s.id !== id);
     localStorage.setItem('carnaval_sponsors', JSON.stringify(filtered));
   },
-  // User Management
+  // Usuários Local
   async getUsers(): Promise<AppUser[]> {
     const data = localStorage.getItem('platform_users');
     return data ? JSON.parse(data) : [];
@@ -143,20 +143,13 @@ const getProvider = (): DBProvider => {
         .from('fotos_evento')
         .select('*')
         .order('createdAt', { ascending: false });
-      if (error) {
-        console.error("Erro Supabase Photos:", error);
-        return [];
-      }
+      if (error) return [];
       return (data as EventPhoto[]) || [];
     },
     async addEventPhoto(photo: EventPhoto): Promise<void> {
       const { error } = await supabaseInstance!
         .from('fotos_evento')
-        .insert([{ 
-          id: photo.id, 
-          url: photo.url, 
-          createdAt: photo.createdAt 
-        }]);
+        .insert([photo]);
       if (error) throw error;
     },
     async deleteEventPhoto(id: string): Promise<void> {
@@ -171,10 +164,7 @@ const getProvider = (): DBProvider => {
         .from('patrocinadores')
         .select('*')
         .order('createdAt', { ascending: false });
-      if (error) {
-        console.error("Erro Supabase Patrocinadores:", error);
-        return [];
-      }
+      if (error) return [];
       return (data as Sponsor[]) || [];
     },
     async addSponsor(sponsor: Sponsor): Promise<void> {
@@ -198,7 +188,7 @@ const getProvider = (): DBProvider => {
         .eq('id', id);
       if (error) throw error;
     },
-    // User Admin Supabase
+    // Usuários Supabase
     async getUsers(): Promise<AppUser[]> {
       const { data, error } = await supabaseInstance!.from('usuarios_plataforma').select('*');
       if (error) throw error;
@@ -232,7 +222,7 @@ export const databaseService = {
   addSponsor: (s: Sponsor) => getProvider().addSponsor(s),
   updateSponsor: (s: Sponsor) => getProvider().updateSponsor(s),
   deleteSponsor: (id: string) => getProvider().deleteSponsor(id),
-  // Users
+  // Usuários
   getUsers: () => getProvider().getUsers(),
   addUser: (u: AppUser) => getProvider().addUser(u),
   updateUser: (u: AppUser) => getProvider().updateUser(u),

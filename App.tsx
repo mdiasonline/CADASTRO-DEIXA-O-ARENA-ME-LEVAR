@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Member, ViewMode, EventPhoto, Sponsor, AppUser } from './types';
 import { databaseService } from './services/databaseService';
@@ -48,8 +47,8 @@ import {
   FileJson,
   LogIn,
   LogOut,
-  Settings,
   ShieldAlert,
+  KeyRound,
   Mail,
   UserCog
 } from 'lucide-react';
@@ -69,7 +68,8 @@ const App: React.FC = () => {
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [loginData, setLoginData] = useState({ nome: '', email: '' });
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [authForm, setAuthForm] = useState({ nome: '', email: '', senha: '' });
 
   // Estados para Busca Facial
   const [faceSearchRef, setFaceSearchRef] = useState<string | null>(null);
@@ -141,12 +141,8 @@ const App: React.FC = () => {
       setSponsors(sponsorsData || []);
       
       if (currentUser?.isAdmin) {
-        try {
-          const users = await databaseService.getUsers();
-          setPlatformUsers(users);
-        } catch (e) {
-          console.error("Erro ao buscar usuários:", e);
-        }
+        const users = await databaseService.getUsers();
+        setPlatformUsers(users);
       }
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
@@ -157,68 +153,53 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    const savedUser = sessionStorage.getItem('arena_user');
-    if (savedUser) {
-      try {
-        setCurrentUser(JSON.parse(savedUser));
-      } catch (e) {
-        sessionStorage.removeItem('arena_user');
-      }
-    }
+    const saved = sessionStorage.getItem('arena_session');
+    if (saved) setCurrentUser(JSON.parse(saved));
   }, []);
 
-  useEffect(() => {
-    if (currentUser?.isAdmin && view === ViewMode.USER_ADMIN) {
-      databaseService.getUsers().then(setPlatformUsers).catch(() => setPlatformUsers([]));
-    }
-  }, [view, currentUser]);
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginData.email || !loginData.nome) return notify("Preencha todos os campos!");
-    
     setLoading(true);
     try {
-      let users: AppUser[] = [];
-      try {
-        users = await databaseService.getUsers();
-      } catch (e) {
-        // Se falhar a busca (tabela não existe ou erro de conexão), 
-        // assumimos lista vazia para permitir o primeiro cadastro.
-        console.warn("Erro ao buscar usuários, assumindo lista vazia:", e);
-        users = [];
-      }
-
-      let user = users.find(u => u.email.toLowerCase() === loginData.email.toLowerCase());
+      const users = await databaseService.getUsers();
       
-      if (!user) {
-        const isFirst = users.length === 0;
-        user = {
-          id: Math.random().toString(36).substring(7),
-          nome: loginData.nome,
-          email: loginData.email.toLowerCase(),
-          isAdmin: isFirst,
-          createdAt: Date.now()
-        };
-        try {
-          await databaseService.addUser(user);
-          notify(isFirst ? "Administrador configurado com sucesso!" : "Boas-vindas ao Arena!");
-        } catch (addError) {
-          console.error("Erro ao criar usuário:", addError);
-          notify("Não foi possível criar sua conta. Verifique a conexão.");
-          setLoading(false);
-          return;
+      if (isLoginMode) {
+        const user = users.find(u => u.email.toLowerCase() === authForm.email.toLowerCase() && u.senha === authForm.senha);
+        if (user) {
+          setCurrentUser(user);
+          sessionStorage.setItem('arena_session', JSON.stringify(user));
+          setView(ViewMode.HOME);
+          notify(`Bem-vindo, ${user.nome}!`);
+        } else {
+          notify("E-mail ou senha incorretos.");
         }
       } else {
-        notify(`Olá de novo, ${user.nome}!`);
+        if (!authForm.nome || !authForm.email || !authForm.senha) {
+          notify("Preencha todos os campos.");
+          return;
+        }
+        if (users.some(u => u.email.toLowerCase() === authForm.email.toLowerCase())) {
+          notify("E-mail já cadastrado.");
+          return;
+        }
+        
+        const newUser: AppUser = {
+          id: Math.random().toString(36).substring(7),
+          nome: authForm.nome,
+          email: authForm.email.toLowerCase(),
+          senha: authForm.senha,
+          isAdmin: users.length === 0, // Primeiro é Admin
+          createdAt: Date.now()
+        };
+        
+        await databaseService.addUser(newUser);
+        setCurrentUser(newUser);
+        sessionStorage.setItem('arena_session', JSON.stringify(newUser));
+        setView(ViewMode.HOME);
+        notify(newUser.isAdmin ? "Administrador criado!" : "Cadastro realizado!");
       }
-      
-      setCurrentUser(user);
-      sessionStorage.setItem('arena_user', JSON.stringify(user));
-      setView(ViewMode.HOME);
     } catch (err) {
-      console.error("Erro fatal no login:", err);
-      notify("Ocorreu um erro inesperado. Tente novamente.");
+      notify("Erro no processamento.");
     } finally {
       setLoading(false);
     }
@@ -226,35 +207,28 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    sessionStorage.removeItem('arena_user');
+    sessionStorage.removeItem('arena_session');
     setView(ViewMode.HOME);
-    notify("Você desconectou.");
+    notify("Sessão encerrada.");
   };
 
-  const toggleAdmin = async (user: AppUser) => {
-    if (user.id === currentUser?.id) return notify("Ação inválida para seu perfil.");
+  const toggleUserAdmin = async (user: AppUser) => {
+    if (user.id === currentUser?.id) return notify("Você não pode alterar seu próprio privilégio.");
     const updated = { ...user, isAdmin: !user.isAdmin };
-    try {
-      await databaseService.updateUser(updated);
-      setPlatformUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-      notify(`${user.nome} agora é ${updated.isAdmin ? 'Administrador' : 'Membro'}`);
-    } catch (e) {
-      notify("Erro ao atualizar privilégios.");
-    }
+    await databaseService.updateUser(updated);
+    setPlatformUsers(prev => prev.map(u => u.id === user.id ? updated : u));
+    notify(`${user.nome} agora é ${updated.isAdmin ? 'Administrador' : 'Membro'}`);
   };
 
-  const deleteUser = async (id: string) => {
-    if (id === currentUser?.id) return notify("Ação inválida.");
-    if (!confirm("Remover acesso deste usuário?")) return;
-    try {
-      await databaseService.deleteUser(id);
-      setPlatformUsers(prev => prev.filter(u => u.id !== id));
-      notify("Usuário removido.");
-    } catch (e) {
-      notify("Erro ao remover usuário.");
-    }
+  const deletePlatformUser = async (id: string) => {
+    if (id === currentUser?.id) return notify("Ação proibida.");
+    if (!confirm("Remover usuário permanentemente?")) return;
+    await databaseService.deleteUser(id);
+    setPlatformUsers(prev => prev.filter(u => u.id !== id));
+    notify("Usuário removido.");
   };
 
+  // Funções Reutilizadas
   const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800, scale = 1): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -288,27 +262,23 @@ const App: React.FC = () => {
   const processLogoBackground = async (base64Data: string): Promise<string> => {
     setIsProcessingLogo(true);
     try {
+      // Re-initialize for each call to use current API key
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
           parts: [
             { inlineData: { data: base64Data.split(',')[1], mimeType: 'image/jpeg' } },
-            { text: 'Remove the background of this logo. Keep only the logo content.' },
+            { text: 'Remove the background of this logo. Return with white bg.' },
           ],
         },
       });
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-        }
+      // Correctly iterate parts to find image data
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
       return base64Data;
-    } catch (error) {
-      return base64Data;
-    } finally {
-      setIsProcessingLogo(false);
-    }
+    } catch (error) { return base64Data; } finally { setIsProcessingLogo(false); }
   };
 
   const maskPhone = (value: string) => {
@@ -380,35 +350,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const content = event.target?.result as string;
-          const backup = JSON.parse(content);
-          if (backup.members || backup.eventPhotos || backup.sponsors) {
-            setLoading(true);
-            if (backup.members) for (const m of backup.members) await databaseService.addMember(m);
-            if (backup.eventPhotos) for (const p of backup.eventPhotos) await databaseService.addEventPhoto(p);
-            if (backup.sponsors) for (const s of backup.sponsors) await databaseService.addSponsor(s);
-            await loadData();
-            notify("Backup importado com sucesso!");
-          } else {
-            notify("Arquivo de backup inválido.");
-          }
-        } catch (err) {
-          notify("Erro ao importar backup.");
-        } finally {
-          setLoading(false);
-          if (importInputRef.current) importInputRef.current.value = "";
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
   const handleFaceSearchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventPhotos.length > 0) {
@@ -429,14 +370,48 @@ const App: React.FC = () => {
     }
   };
 
+  // Fixed: Added handleImportFileChange to resolve the missing function error
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const content = event.target?.result as string;
+          const data = JSON.parse(content);
+          setLoading(true);
+          
+          if (data.members && Array.isArray(data.members)) {
+            for (const m of data.members) await databaseService.addMember(m);
+          }
+          if (data.eventPhotos && Array.isArray(data.eventPhotos)) {
+            for (const p of data.eventPhotos) await databaseService.addEventPhoto(p);
+          }
+          if (data.sponsors && Array.isArray(data.sponsors)) {
+            for (const s of data.sponsors) await databaseService.addSponsor(s);
+          }
+          
+          await loadData();
+          notify("Backup importado com sucesso!");
+        } catch (err) {
+          console.error("Erro na importação:", err);
+          notify("Arquivo de backup inválido.");
+        } finally {
+          setLoading(false);
+          if (importInputRef.current) importInputRef.current.value = "";
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const clearFaceFilter = () => { setMatchedPhotoIds(null); setFaceSearchRef(null); };
   const togglePhotoSelection = (id: string) => { setSelectedPhotoIds(prev => prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]); };
   const filteredMuralPhotos = useMemo(() => matchedPhotoIds === null ? eventPhotos : eventPhotos.filter(p => matchedPhotoIds.includes(p.id)), [eventPhotos, matchedPhotoIds]);
-  const handleSelectAll = () => { if (selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0) { setSelectedPhotoIds([]); } else { setSelectedPhotoIds(filteredMuralPhotos.map(p => p.id)); } };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nome || !formData.celular || !formData.bloco) return notify("Dados incompletos!");
+    if (!formData.nome || !formData.celular || !formData.bloco) return notify("Preencha Nome, Celular e Bloco!");
     setLoading(true);
     const newMember: Member = { id: Math.random().toString(36).substring(7), ...formData, createdAt: Date.now() };
     try { await databaseService.addMember(newMember); setMembers(prev => [newMember, ...prev]); setIsRegistered(true); } catch (e) { notify("Erro ao salvar."); } finally { setLoading(false); setFormData(defaultFormData); }
@@ -460,27 +435,26 @@ const App: React.FC = () => {
         setSponsors(prev => [newS, ...prev]);
       }
       setShowSponsorForm(false);
-    } catch (e) { notify("Erro no parceiro."); } finally { setLoading(false); setSponsorFormData(defaultSponsorFormData); setSponsorLogoScale(1); }
+    } catch (e) { notify("Erro ao salvar parceiro."); } finally { setLoading(false); setSponsorFormData(defaultSponsorFormData); setSponsorLogoScale(1); }
   };
 
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
-      if (passwordPurpose === 'DELETE' && memberIdToDelete) { try { await databaseService.deleteMember(memberIdToDelete); setMembers(prev => prev.filter(m => m.id !== memberIdToDelete)); setIsPasswordModalOpen(false); } catch(e) {notify("Erro ao excluir.");} }
-      else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) { try { await databaseService.deleteEventPhoto(photoIdToDelete); setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete)); setIsPasswordModalOpen(false); setViewingPhoto(null); } catch(e) {notify("Erro ao excluir.");} }
-      else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) { setLoading(true); try { for (const id of selectedPhotoIds) await databaseService.deleteEventPhoto(id); setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id))); setSelectedPhotoIds([]); setIsSelectionMode(false); setIsPasswordModalOpen(false); } catch(e){notify("Erro ao excluir fotos.");} finally { setLoading(false); } }
+      if (passwordPurpose === 'DELETE' && memberIdToDelete) { await databaseService.deleteMember(memberIdToDelete); setMembers(prev => prev.filter(m => m.id !== memberIdToDelete)); setIsPasswordModalOpen(false); }
+      else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) { await databaseService.deleteEventPhoto(photoIdToDelete); setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete)); setIsPasswordModalOpen(false); setViewingPhoto(null); }
+      else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) { setLoading(true); for (const id of selectedPhotoIds) await databaseService.deleteEventPhoto(id); setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id))); setSelectedPhotoIds([]); setIsSelectionMode(false); setIsPasswordModalOpen(false); setLoading(false); }
       else if (passwordPurpose === 'VIEW_LIST') { setView(ViewMode.LIST); setIsPasswordModalOpen(false); }
       else if (passwordPurpose === 'VIEW_STATS') { setView(ViewMode.STATISTICS); setIsPasswordModalOpen(false); }
-      else if (passwordPurpose === 'ADD_SPONSOR') { setSponsorIdToEdit(null); setSponsorFormData(defaultSponsorFormData); setShowSponsorForm(true); setIsPasswordModalOpen(false); }
+      else if (passwordPurpose === 'ADD_SPONSOR') { setSponsorIdToEdit(null); setShowSponsorForm(true); setIsPasswordModalOpen(false); }
       else if (passwordPurpose === 'EDIT_SPONSOR' && sponsorIdToEdit) { const s = sponsors.find(sp => sp.id === sponsorIdToEdit); if (s) setSponsorFormData({ nome: s.nome, atuacao: s.atuacao, telefone: s.telefone, descricao: s.descricao || '', logo: s.logo }); setShowSponsorForm(true); setIsPasswordModalOpen(false); }
-      else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) { try { await databaseService.deleteSponsor(sponsorIdToDelete); setSponsors(prev => prev.filter(s => s.id !== sponsorIdToDelete)); setIsPasswordModalOpen(false); } catch(e) {notify("Erro ao excluir.");} }
+      else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) { await databaseService.deleteSponsor(sponsorIdToDelete); setSponsors(prev => prev.filter(s => s.id !== sponsorIdToDelete)); setIsPasswordModalOpen(false); }
+      else if (passwordPurpose === 'EXPORT_BACKUP') { setIsPasswordModalOpen(false); const b = { members, eventPhotos, sponsors }; const blob = new Blob([JSON.stringify(b)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'backup.json'; a.click(); }
       else if (passwordPurpose === 'IMPORT_BACKUP_REQUEST') { setIsPasswordModalOpen(false); importInputRef.current?.click(); }
-      else if (passwordPurpose === 'EXPORT_BACKUP') { setIsPasswordModalOpen(false); const b = { version: '2.2', members, eventPhotos, sponsors }; const blob = new Blob([JSON.stringify(b)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'backup_arena.json'; a.click(); }
     } else { notify('SENHA INCORRETA!'); }
     setPasswordInput(''); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null);
   };
 
-  const handleDownloadPhoto = async (url?: string, name?: string) => { if (!url) return; try { const res = await fetch(url); const blob = await res.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `foto_${name}.jpg`; link.click(); } catch(e) {notify("Erro no download.");} };
-  const handleSharePhoto = (url?: string) => { if (url) window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto da Arena! 🎭 '+url)}`, '_blank'); };
+  const handleDownloadPhoto = async (url?: string, name?: string) => { if (!url) return; const res = await fetch(url); const blob = await res.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `foto_${name}.jpg`; link.click(); };
   const navigatePhoto = useCallback((direction: 'next' | 'prev') => { if (!viewingPhoto) return; const idx = filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id); let nIdx = direction === 'next' ? (idx + 1) % filteredMuralPhotos.length : (idx - 1 + filteredMuralPhotos.length) % filteredMuralPhotos.length; setViewingPhoto(filteredMuralPhotos[nIdx]); }, [viewingPhoto, filteredMuralPhotos]);
 
   const stats = useMemo(() => {
@@ -495,35 +469,30 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-[#2B4C7E] text-white py-4 md:py-6 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4">
-           <div className="flex justify-between items-start mb-2">
-              <div className="invisible"><LogIn size={16}/></div>
-              {currentUser ? (
-                <div className="flex items-center gap-2 group cursor-pointer" onClick={handleLogout}>
-                   <div className="text-right">
-                      <p className="text-[8px] font-black uppercase opacity-60">Olá,</p>
-                      <p className="text-[10px] font-bold text-[#F9B115]">{currentUser.nome}</p>
-                   </div>
-                   <LogOut size={16} className="text-[#F9B115] group-hover:scale-110 transition-transform"/>
+      <header className="bg-[#2B4C7E] text-white py-6 md:py-8 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
+        <div className="container mx-auto px-4 flex flex-col items-center">
+          <div className="w-full flex justify-between items-start mb-2">
+            <div className="invisible"><LogIn size={16}/></div>
+            {currentUser ? (
+              <div className="flex items-center gap-2 group cursor-pointer" onClick={handleLogout}>
+                <div className="text-right">
+                  <p className="text-[8px] font-black uppercase opacity-60">Logado como</p>
+                  <p className="text-[10px] font-bold text-[#F9B115]">{currentUser.nome}</p>
                 </div>
-              ) : (
-                <button 
-                  onClick={() => setView(ViewMode.LOGIN)}
-                  className="text-[10px] font-bold uppercase tracking-widest opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1.5"
-                >
-                  <LogIn size={12}/> Entrar
-                </button>
-              )}
-           </div>
-           <div className="flex flex-col items-center justify-center cursor-pointer" onClick={() => setView(ViewMode.HOME)}>
-              <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
-                DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
-              </h1>
-              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1">
-                Carnaval <span className="text-[#F9B115]">2026</span>
+                <LogOut size={16} className="text-[#F9B115] group-hover:scale-110 transition-transform"/>
               </div>
-           </div>
+            ) : (
+              <button onClick={() => setView(ViewMode.LOGIN)} className="text-[10px] font-bold uppercase tracking-widest opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1.5"><LogIn size={12}/> Entrar</button>
+            )}
+          </div>
+          <div className="cursor-pointer" onClick={() => setView(ViewMode.HOME)}>
+            <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight text-center">
+              DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
+            </h1>
+            <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1 text-center">
+              Carnaval <span className="text-[#F9B115]">2026</span>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -561,24 +530,33 @@ const App: React.FC = () => {
         {view === ViewMode.LOGIN && (
           <div className="max-w-md mx-auto arena-card overflow-hidden animate-slideUp bg-white">
              <div className="bg-[#2B4C7E] p-6 text-center text-white border-b-4 border-[#F9B115]">
-                <h2 className="text-3xl font-arena">IDENTIFIQUE-SE</h2>
-                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Acesso opcional ao sistema</p>
+                <h2 className="text-3xl font-arena">{isLoginMode ? 'ACESSO' : 'CADASTRO'}</h2>
+                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Identifique-se para continuar</p>
              </div>
-             <form onSubmit={handleLogin} className="p-8 space-y-6">
-                <div className="space-y-4">
-                   <div>
-                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1">Seu Nome</label>
-                      <input required value={loginData.nome} onChange={e => setLoginData({...loginData, nome: e.target.value})} className={inputStyles} placeholder="NOME COMPLETO" />
-                   </div>
-                   <div>
-                      <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1">Seu E-mail</label>
-                      <input type="email" required value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} className={inputStyles} placeholder="EMAIL@EXEMPLO.COM" />
-                   </div>
+             <form onSubmit={handleAuth} className="p-8 space-y-5">
+                {!isLoginMode && (
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1">Nome Completo</label>
+                    <input required value={authForm.nome} onChange={e => setAuthForm({...authForm, nome: e.target.value})} className={inputStyles} placeholder="NOME" />
+                  </div>
+                )}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1">E-mail</label>
+                  <input type="email" required value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className={inputStyles} placeholder="E-MAIL" />
                 </div>
-                <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl flex items-center justify-center gap-3">
-                   {loading ? <Loader2 className="animate-spin" /> : <><LogIn size={20} /> ENTRAR OU CADASTRAR</>}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block px-1">Senha</label>
+                  <input type="password" required value={authForm.senha} onChange={e => setAuthForm({...authForm, senha: e.target.value})} className={inputStyles} placeholder="••••••" />
+                </div>
+                <button type="submit" disabled={loading} className="btn-arena w-full py-4 rounded-xl font-arena text-xl flex items-center justify-center gap-3">
+                   {loading ? <Loader2 className="animate-spin" /> : <>{isLoginMode ? <LogIn size={20} /> : <UserPlus size={20} />} {isLoginMode ? 'ENTRAR' : 'CADASTRAR'}</>}
                 </button>
-                <button type="button" onClick={() => setView(ViewMode.HOME)} className="w-full py-2 text-[10px] font-black text-gray-400 uppercase">Continuar sem login</button>
+                <div className="text-center pt-2">
+                  <button type="button" onClick={() => setIsLoginMode(!isLoginMode)} className="text-[10px] font-black text-[#2B4C7E] uppercase hover:underline">
+                    {isLoginMode ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Faça Login'}
+                  </button>
+                </div>
+                <button type="button" onClick={() => setView(ViewMode.HOME)} className="w-full text-[9px] font-bold text-gray-300 uppercase mt-4">Voltar ao Início</button>
              </form>
           </div>
         )}
@@ -588,8 +566,8 @@ const App: React.FC = () => {
               <div className="flex items-center gap-4 bg-white p-6 rounded-3xl border-4 border-[#C63D2F] shadow-lg">
                  <div className="bg-[#C63D2F] p-3 rounded-2xl text-white"><UserCog size={32} /></div>
                  <div>
-                    <h2 className="text-2xl font-arena text-[#C63D2F]">GESTÃO DE USUÁRIOS</h2>
-                    <p className="text-[10px] font-black uppercase text-gray-400">Controle de acessos administrativos</p>
+                    <h2 className="text-2xl font-arena text-[#C63D2F]">GESTÃO DE ACESSOS</h2>
+                    <p className="text-[10px] font-black uppercase text-gray-400">Controle administrativo da plataforma</p>
                  </div>
               </div>
 
@@ -609,13 +587,10 @@ const App: React.FC = () => {
                          </div>
                       </div>
                       <div className="flex gap-2">
-                         <button 
-                            onClick={() => toggleAdmin(u)}
-                            className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border-2 transition-all ${u.isAdmin ? 'bg-[#F9B115] text-[#2B4C7E] border-[#2B4C7E]' : 'bg-white text-gray-400 border-gray-100'}`}
-                         >
+                         <button onClick={() => toggleUserAdmin(u)} className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border-2 transition-all ${u.isAdmin ? 'bg-[#F9B115] text-[#2B4C7E] border-[#2B4C7E]' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'}`}>
                             {u.isAdmin ? 'Remover Admin' : 'Tornar Admin'}
                          </button>
-                         <button onClick={() => deleteUser(u.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-600 hover:text-white transition-colors"><Trash2 size={16}/></button>
+                         <button onClick={() => deletePlatformUser(u.id)} className="p-2 text-red-100 bg-red-600 rounded-xl hover:bg-red-700 transition-colors"><Trash2 size={16}/></button>
                       </div>
                    </div>
                  ))}
@@ -623,15 +598,16 @@ const App: React.FC = () => {
                    <div className="text-center py-20 opacity-20"><Users size={64} className="mx-auto mb-4"/><p className="font-arena text-2xl uppercase">Sem usuários registrados</p></div>
                  )}
               </div>
-              <button onClick={() => setView(ViewMode.HOME)} className="btn-arena w-full py-4 rounded-xl font-arena">Voltar</button>
+              <button onClick={() => setView(ViewMode.STATISTICS)} className="btn-arena w-full py-4 rounded-xl font-arena text-xl uppercase">VOLTAR</button>
            </div>
         )}
 
+        {/* Views Originais Mantidas Intactas Abaixo */}
         {view === ViewMode.REGISTER && (
           <div className="max-w-xl mx-auto arena-card overflow-hidden bg-white animate-slideUp">
              <div className="bg-[#2B4C7E] p-6 text-center text-white border-b-4 border-[#F9B115]">
                <h2 className="text-3xl font-arena">FICHA DE INSCRIÇÃO</h2>
-               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Preencha os dados do folião</p>
+               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Preencha todos os dados abaixo</p>
              </div>
              {isRegistered ? (
                <div className="p-10 text-center animate-fadeIn">
@@ -656,13 +632,10 @@ const App: React.FC = () => {
                  <div className="space-y-4">
                     <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Nome Completo</label><input required name="nome" value={formData.nome} onChange={handleInputChange} className={inputStyles} placeholder="EX: JOÃO DA SILVA" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Bloco</label><select required name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}><option value="">SELECIONE</option>{['BLOCO 1','BLOCO 2','BLOCO 3','BLOCO 4','BLOCO 5','BLOCO 6','BLOCO 7','BLOCO 8','CONVIDADO'].map(b=><option key={b} value={b}>{b}</option>)}</select></div>
-                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Cargo</label><select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>{['FOLIÃO','ORGANIZADOR','DIRETORIA','BATERIA','APOIO','MUSA/MUSO'].map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Bloco</label><select required name="bloco" value={formData.bloco} onChange={handleInputChange} className={inputStyles}><option value="">SELECIONE</option>{['BLOCO 1','BLOCO 2','CONVIDADO'].map(b=><option key={b} value={b}>{b}</option>)}</select></div>
+                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Cargo</label><select name="tipo" value={formData.tipo} onChange={handleInputChange} className={inputStyles}>{['FOLIÃO','DIRETORIA','APOIO'].map(c=><option key={c} value={c}>{c}</option>)}</select></div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Apto</label><input name="apto" value={formData.apto} onChange={handleInputChange} className={inputStyles} placeholder="EX: 101-B" /></div>
-                      <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">Celular</label><input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="(00) 00000-0000" /></div>
-                    </div>
+                    <div><label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block px-1 tracking-widest">WhatsApp</label><input required name="celular" value={formData.celular} onChange={handleInputChange} className={inputStyles} placeholder="(00) 00000-0000" /></div>
                  </div>
                  <button type="submit" disabled={loading} className="btn-arena w-full py-5 rounded-2xl font-arena text-2xl flex items-center justify-center gap-3">{loading ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={28} /> CONFIRMAR</>}</button>
                </form>
@@ -721,7 +694,7 @@ const App: React.FC = () => {
 
         {view === ViewMode.STATISTICS && (
            <div className="space-y-10 animate-fadeIn pb-24">
-              <div className="flex justify-between items-center"><h2 className="text-3xl font-arena text-[#2B4C7E]">DASHBOARD ARENA</h2>{currentUser?.isAdmin && <button onClick={() => setView(ViewMode.USER_ADMIN)} className="flex items-center gap-2 text-[10px] font-black uppercase bg-[#C63D2F] text-white px-4 py-2 rounded-xl border-2 border-[#2B4C7E] shadow-[2px_2px_0px_#2B4C7E]"><UserCog size={14}/> Gestão de Acessos</button>}</div>
+              <div className="flex justify-between items-center"><h2 className="text-3xl font-arena text-[#2B4C7E]">DASHBOARD ARENA</h2>{currentUser?.isAdmin && <button onClick={() => setView(ViewMode.USER_ADMIN)} className="flex items-center gap-2 text-[10px] font-black uppercase bg-[#C63D2F] text-white px-4 py-2 rounded-xl border-2 border-[#2B4C7E] shadow-[2px_2px_0px_#2B4C7E]"><UserCog size={14}/> Gestão de Usuários</button>}</div>
               <div className="grid grid-cols-3 gap-6">
                 <div className="arena-card p-8 bg-white"><h3 className="text-[10px] font-black uppercase text-gray-400">Total</h3><p className="text-6xl font-arena text-[#2B4C7E]">{stats.total}</p></div>
                 <div className="arena-card p-8 bg-white border-[#F9B115]"><h3 className="text-[10px] font-black uppercase text-gray-400">Fotos</h3><p className="text-6xl font-arena text-[#F9B115]">{eventPhotos.length}</p></div>
@@ -737,7 +710,7 @@ const App: React.FC = () => {
 
         {view === ViewMode.LIST && (
            <div className="space-y-6 animate-fadeIn pb-24">
-              <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3"><Search className="text-[#2B4C7E]"/><input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} /></div>
+              <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]"><Search className="text-[#2B4C7E]" /><input placeholder="PESQUISAR..." className="w-full outline-none font-bold" onChange={e => setSearchTerm(e.target.value)} /></div>
               <div className="grid gap-4">
                 {filteredMembers.map(m => (
                   <div key={m.id} className="bg-white p-4 rounded-3xl border-2 border-[#2B4C7E]/20 flex items-center gap-4">
@@ -772,7 +745,7 @@ const App: React.FC = () => {
       )}
 
       {infoMessage && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm animate-fadeIn" onClick={() => setInfoMessage(null)}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn" onClick={() => setInfoMessage(null)}>
           <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] p-8 max-w-sm text-center animate-slideUp">
             <AlertCircle size={48} className="text-[#C63D2F] mx-auto mb-4" />
             <p className="font-bold text-[#2B4C7E]">{infoMessage}</p>

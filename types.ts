@@ -30,6 +30,7 @@ export interface AppUser {
   id: string;
   nome: string;
   email: string;
+  senha?: string;
   isAdmin: boolean;
   createdAt: number;
 }

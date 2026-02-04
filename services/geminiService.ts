@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export async function generateCarnivalSlogan(nome: string, bloco: string): Promise<string> {
+  // Initialize inside the function to use latest API key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
@@ -13,6 +14,7 @@ export async function generateCarnivalSlogan(nome: string, bloco: string): Promi
       },
     });
 
+    // Access .text property directly
     return response.text?.trim() || "Carnaval é alegria!";
   } catch (error) {
     console.error("Erro ao gerar slogan:", error);
@@ -21,6 +23,7 @@ export async function generateCarnivalSlogan(nome: string, bloco: string): Promi
 }
 
 export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: string, url: string}[]): Promise<string[]> {
+  // Initialize inside the function to use latest API key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const getBase64 = (dataUrl: string) => {
@@ -32,30 +35,29 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
     // Usamos o gemini-3-pro-preview para maior precisão em análise visual complexa
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
-      contents: [
-        {
-          parts: [
-            { text: "Reference Person (the person looking for their photos):" },
+      // Use object format for contents as per multimodal guidelines
+      contents: {
+        parts: [
+          { text: "Reference Person (the person looking for their photos):" },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: getBase64(referencePhoto)
+            }
+          },
+          { text: "Gallery of Event Photos (find the reference person in these):" },
+          ...muralPhotos.flatMap(photo => [
+            { text: `ID: ${photo.id}` },
             {
               inlineData: {
                 mimeType: "image/jpeg",
-                data: getBase64(referencePhoto)
+                data: getBase64(photo.url)
               }
-            },
-            { text: "Gallery of Event Photos (find the reference person in these):" },
-            ...muralPhotos.flatMap(photo => [
-              { text: `ID: ${photo.id}` },
-              {
-                inlineData: {
-                  mimeType: "image/jpeg",
-                  data: getBase64(photo.url)
-                }
-              }
-            ]),
-            { text: "Task: Identify which of the Gallery Photos contain the person shown in the Reference Person photo. Carnival context: ignore face paint, accessories, or slight lighting changes. Return a JSON array with the IDs of the matching photos only." }
-          ]
-        }
-      ],
+            }
+          ]),
+          { text: "Task: Identify which of the Gallery Photos contain the person shown in the Reference Person photo. Carnival context: ignore face paint, accessories, or slight lighting changes. Return a JSON array with the IDs of the matching photos only." }
+        ]
+      },
       config: {
         systemInstruction: "You are an assistant designed to help people find themselves in a public event gallery. Your goal is to match the face of the reference person with faces in the gallery. Be very precise. Return the result strictly as a JSON list of strings (the IDs).",
         responseMimeType: "application/json",
@@ -69,6 +71,7 @@ export async function findFaceMatches(referencePhoto: string, muralPhotos: {id: 
       }
     });
 
+    // Access .text property directly
     const text = response.text;
     if (!text) return [];
     
