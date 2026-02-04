@@ -141,8 +141,12 @@ const App: React.FC = () => {
       setSponsors(sponsorsData || []);
       
       if (currentUser?.isAdmin) {
-        const users = await databaseService.getUsers();
-        setPlatformUsers(users);
+        try {
+          const users = await databaseService.getUsers();
+          setPlatformUsers(users);
+        } catch (e) {
+          console.error("Erro ao buscar usuários:", e);
+        }
       }
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
@@ -154,12 +158,18 @@ const App: React.FC = () => {
   useEffect(() => {
     loadData();
     const savedUser = sessionStorage.getItem('arena_user');
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
+    if (savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+      } catch (e) {
+        sessionStorage.removeItem('arena_user');
+      }
+    }
   }, []);
 
   useEffect(() => {
     if (currentUser?.isAdmin && view === ViewMode.USER_ADMIN) {
-      databaseService.getUsers().then(setPlatformUsers);
+      databaseService.getUsers().then(setPlatformUsers).catch(() => setPlatformUsers([]));
     }
   }, [view, currentUser]);
 
@@ -169,7 +179,16 @@ const App: React.FC = () => {
     
     setLoading(true);
     try {
-      const users = await databaseService.getUsers();
+      let users: AppUser[] = [];
+      try {
+        users = await databaseService.getUsers();
+      } catch (e) {
+        // Se falhar a busca (tabela não existe ou erro de conexão), 
+        // assumimos lista vazia para permitir o primeiro cadastro.
+        console.warn("Erro ao buscar usuários, assumindo lista vazia:", e);
+        users = [];
+      }
+
       let user = users.find(u => u.email.toLowerCase() === loginData.email.toLowerCase());
       
       if (!user) {
@@ -181,8 +200,15 @@ const App: React.FC = () => {
           isAdmin: isFirst,
           createdAt: Date.now()
         };
-        await databaseService.addUser(user);
-        notify(isFirst ? "Administrador configurado!" : "Boas-vindas ao Arena!");
+        try {
+          await databaseService.addUser(user);
+          notify(isFirst ? "Administrador configurado com sucesso!" : "Boas-vindas ao Arena!");
+        } catch (addError) {
+          console.error("Erro ao criar usuário:", addError);
+          notify("Não foi possível criar sua conta. Verifique a conexão.");
+          setLoading(false);
+          return;
+        }
       } else {
         notify(`Olá de novo, ${user.nome}!`);
       }
@@ -191,7 +217,8 @@ const App: React.FC = () => {
       sessionStorage.setItem('arena_user', JSON.stringify(user));
       setView(ViewMode.HOME);
     } catch (err) {
-      notify("Erro no login.");
+      console.error("Erro fatal no login:", err);
+      notify("Ocorreu um erro inesperado. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -207,17 +234,25 @@ const App: React.FC = () => {
   const toggleAdmin = async (user: AppUser) => {
     if (user.id === currentUser?.id) return notify("Ação inválida para seu perfil.");
     const updated = { ...user, isAdmin: !user.isAdmin };
-    await databaseService.updateUser(updated);
-    setPlatformUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-    notify(`${user.nome} agora é ${updated.isAdmin ? 'Administrador' : 'Membro'}`);
+    try {
+      await databaseService.updateUser(updated);
+      setPlatformUsers(prev => prev.map(u => u.id === user.id ? updated : u));
+      notify(`${user.nome} agora é ${updated.isAdmin ? 'Administrador' : 'Membro'}`);
+    } catch (e) {
+      notify("Erro ao atualizar privilégios.");
+    }
   };
 
   const deleteUser = async (id: string) => {
     if (id === currentUser?.id) return notify("Ação inválida.");
     if (!confirm("Remover acesso deste usuário?")) return;
-    await databaseService.deleteUser(id);
-    setPlatformUsers(prev => prev.filter(u => u.id !== id));
-    notify("Usuário removido.");
+    try {
+      await databaseService.deleteUser(id);
+      setPlatformUsers(prev => prev.filter(u => u.id !== id));
+      notify("Usuário removido.");
+    } catch (e) {
+      notify("Erro ao remover usuário.");
+    }
   };
 
   const compressImage = (base64Str: string, quality = 0.6, maxWidth = 800, scale = 1): Promise<string> => {
@@ -430,21 +465,21 @@ const App: React.FC = () => {
 
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
-      if (passwordPurpose === 'DELETE' && memberIdToDelete) { await databaseService.deleteMember(memberIdToDelete); setMembers(prev => prev.filter(m => m.id !== memberIdToDelete)); setIsPasswordModalOpen(false); }
-      else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) { await databaseService.deleteEventPhoto(photoIdToDelete); setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete)); setIsPasswordModalOpen(false); setViewingPhoto(null); }
-      else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) { setLoading(true); for (const id of selectedPhotoIds) await databaseService.deleteEventPhoto(id); setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id))); setSelectedPhotoIds([]); setIsSelectionMode(false); setIsPasswordModalOpen(false); setLoading(false); }
+      if (passwordPurpose === 'DELETE' && memberIdToDelete) { try { await databaseService.deleteMember(memberIdToDelete); setMembers(prev => prev.filter(m => m.id !== memberIdToDelete)); setIsPasswordModalOpen(false); } catch(e) {notify("Erro ao excluir.");} }
+      else if (passwordPurpose === 'DELETE_PHOTO' && photoIdToDelete) { try { await databaseService.deleteEventPhoto(photoIdToDelete); setEventPhotos(prev => prev.filter(p => p.id !== photoIdToDelete)); setIsPasswordModalOpen(false); setViewingPhoto(null); } catch(e) {notify("Erro ao excluir.");} }
+      else if (passwordPurpose === 'DELETE_PHOTOS_BATCH' && selectedPhotoIds.length > 0) { setLoading(true); try { for (const id of selectedPhotoIds) await databaseService.deleteEventPhoto(id); setEventPhotos(prev => prev.filter(p => !selectedPhotoIds.includes(p.id))); setSelectedPhotoIds([]); setIsSelectionMode(false); setIsPasswordModalOpen(false); } catch(e){notify("Erro ao excluir fotos.");} finally { setLoading(false); } }
       else if (passwordPurpose === 'VIEW_LIST') { setView(ViewMode.LIST); setIsPasswordModalOpen(false); }
       else if (passwordPurpose === 'VIEW_STATS') { setView(ViewMode.STATISTICS); setIsPasswordModalOpen(false); }
       else if (passwordPurpose === 'ADD_SPONSOR') { setSponsorIdToEdit(null); setSponsorFormData(defaultSponsorFormData); setShowSponsorForm(true); setIsPasswordModalOpen(false); }
       else if (passwordPurpose === 'EDIT_SPONSOR' && sponsorIdToEdit) { const s = sponsors.find(sp => sp.id === sponsorIdToEdit); if (s) setSponsorFormData({ nome: s.nome, atuacao: s.atuacao, telefone: s.telefone, descricao: s.descricao || '', logo: s.logo }); setShowSponsorForm(true); setIsPasswordModalOpen(false); }
-      else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) { await databaseService.deleteSponsor(sponsorIdToDelete); setSponsors(prev => prev.filter(s => s.id !== sponsorIdToDelete)); setIsPasswordModalOpen(false); }
+      else if (passwordPurpose === 'DELETE_SPONSOR' && sponsorIdToDelete) { try { await databaseService.deleteSponsor(sponsorIdToDelete); setSponsors(prev => prev.filter(s => s.id !== sponsorIdToDelete)); setIsPasswordModalOpen(false); } catch(e) {notify("Erro ao excluir.");} }
       else if (passwordPurpose === 'IMPORT_BACKUP_REQUEST') { setIsPasswordModalOpen(false); importInputRef.current?.click(); }
       else if (passwordPurpose === 'EXPORT_BACKUP') { setIsPasswordModalOpen(false); const b = { version: '2.2', members, eventPhotos, sponsors }; const blob = new Blob([JSON.stringify(b)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'backup_arena.json'; a.click(); }
     } else { notify('SENHA INCORRETA!'); }
     setPasswordInput(''); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null);
   };
 
-  const handleDownloadPhoto = async (url?: string, name?: string) => { if (!url) return; const res = await fetch(url); const blob = await res.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `foto_${name}.jpg`; link.click(); };
+  const handleDownloadPhoto = async (url?: string, name?: string) => { if (!url) return; try { const res = await fetch(url); const blob = await res.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `foto_${name}.jpg`; link.click(); } catch(e) {notify("Erro no download.");} };
   const handleSharePhoto = (url?: string) => { if (url) window.open(`https://wa.me/?text=${encodeURIComponent('Olha essa foto da Arena! 🎭 '+url)}`, '_blank'); };
   const navigatePhoto = useCallback((direction: 'next' | 'prev') => { if (!viewingPhoto) return; const idx = filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id); let nIdx = direction === 'next' ? (idx + 1) % filteredMuralPhotos.length : (idx - 1 + filteredMuralPhotos.length) % filteredMuralPhotos.length; setViewingPhoto(filteredMuralPhotos[nIdx]); }, [viewingPhoto, filteredMuralPhotos]);
 
