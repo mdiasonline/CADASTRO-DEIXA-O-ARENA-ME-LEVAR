@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Member, EventPhoto, Sponsor, AppUser } from "../types";
+import { Member, EventPhoto, Sponsor } from "../types";
 
 interface DBProvider {
   getMembers(): Promise<Member[]>;
@@ -13,11 +13,6 @@ interface DBProvider {
   addSponsor(sponsor: Sponsor): Promise<void>;
   updateSponsor(sponsor: Sponsor): Promise<void>;
   deleteSponsor(id: string): Promise<void>;
-  // Auth & User Admin
-  getUsers(): Promise<AppUser[]>;
-  addUser(user: AppUser): Promise<void>;
-  updateUser(user: AppUser): Promise<void>;
-  deleteUser(id: string): Promise<void>;
   isLocal: boolean;
 }
 
@@ -69,25 +64,6 @@ const localProvider: DBProvider = {
     const sponsors = await this.getSponsors();
     const filtered = sponsors.filter(s => s.id !== id);
     localStorage.setItem('carnaval_sponsors', JSON.stringify(filtered));
-  },
-  // User Management
-  async getUsers(): Promise<AppUser[]> {
-    const data = localStorage.getItem('platform_users');
-    return data ? JSON.parse(data) : [];
-  },
-  async addUser(user: AppUser): Promise<void> {
-    const users = await this.getUsers();
-    localStorage.setItem('platform_users', JSON.stringify([...users, user]));
-  },
-  async updateUser(user: AppUser): Promise<void> {
-    const users = await this.getUsers();
-    const updated = users.map(u => u.id === user.id ? user : u);
-    localStorage.setItem('platform_users', JSON.stringify(updated));
-  },
-  async deleteUser(id: string): Promise<void> {
-    const users = await this.getUsers();
-    const filtered = users.filter(u => u.id !== id);
-    localStorage.setItem('platform_users', JSON.stringify(filtered));
   }
 };
 
@@ -184,6 +160,8 @@ const getProvider = (): DBProvider => {
       if (error) throw error;
     },
     async updateSponsor(sponsor: Sponsor): Promise<void> {
+      // O Supabase pode falhar ao tentar atualizar a própria coluna ID, mesmo que o valor seja o mesmo.
+      // Removemos o ID do corpo do objeto enviado para .update()
       const { id, ...dataToUpdate } = sponsor;
       const { error } = await supabaseInstance!
         .from('patrocinadores')
@@ -196,25 +174,6 @@ const getProvider = (): DBProvider => {
         .from('patrocinadores')
         .delete()
         .eq('id', id);
-      if (error) throw error;
-    },
-    // User Admin Supabase
-    async getUsers(): Promise<AppUser[]> {
-      const { data, error } = await supabaseInstance!.from('usuarios_plataforma').select('*');
-      if (error) throw error;
-      return data || [];
-    },
-    async addUser(user: AppUser): Promise<void> {
-      const { error } = await supabaseInstance!.from('usuarios_plataforma').insert([user]);
-      if (error) throw error;
-    },
-    async updateUser(user: AppUser): Promise<void> {
-      const { id, ...data } = user;
-      const { error } = await supabaseInstance!.from('usuarios_plataforma').update(data).eq('id', id);
-      if (error) throw error;
-    },
-    async deleteUser(id: string): Promise<void> {
-      const { error } = await supabaseInstance!.from('usuarios_plataforma').delete().eq('id', id);
       if (error) throw error;
     }
   };
@@ -231,10 +190,5 @@ export const databaseService = {
   getSponsors: () => getProvider().getSponsors(),
   addSponsor: (s: Sponsor) => getProvider().addSponsor(s),
   updateSponsor: (s: Sponsor) => getProvider().updateSponsor(s),
-  deleteSponsor: (id: string) => getProvider().deleteSponsor(id),
-  // Users
-  getUsers: () => getProvider().getUsers(),
-  addUser: (u: AppUser) => getProvider().addUser(u),
-  updateUser: (u: AppUser) => getProvider().updateUser(u),
-  deleteUser: (id: string) => getProvider().deleteUser(id)
+  deleteSponsor: (id: string) => getProvider().deleteSponsor(id)
 };
