@@ -26,22 +26,11 @@ export interface Sponsor {
   createdAt: number;
 }
 
-export interface AppUser {
-  id: string;
-  nome: string;
-  email: string;
-  senha?: string;
-  isAdmin: boolean;
-  createdAt: number;
-}
-
 export enum ViewMode {
   HOME = 'HOME',
   REGISTER = 'REGISTER',
   LIST = 'LIST',
   STATISTICS = 'STATISTICS',
   PHOTOS = 'PHOTOS',
-  SPONSORS = 'SPONSORS',
-  LOGIN = 'LOGIN',
-  USER_ADMIN = 'USER_ADMIN'
+  SPONSORS = 'SPONSORS'
 }
