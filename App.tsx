@@ -76,7 +76,7 @@ const App: React.FC = () => {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | 'IMPORT_BACKUP' | 'EXPORT_BACKUP' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | 'IMPORT_BACKUP_REQUEST' | 'EXPORT_BACKUP' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
@@ -380,7 +380,6 @@ const App: React.FC = () => {
     setLoading(true);
     
     try {
-      // Processar a imagem final apenas se necessário
       const finalLogo = await compressImage(sponsorFormData.logo, 0.8, 400, sponsorLogoScale);
 
       if (sponsorIdToEdit) {
@@ -391,9 +390,13 @@ const App: React.FC = () => {
           logo: finalLogo,
           createdAt: originalSponsor?.createdAt || Date.now()
         };
+        
         await databaseService.updateSponsor(updatedSponsor);
+        
+        // Atualiza a UI imediatamente
         setSponsors(prev => prev.map(s => s.id === sponsorIdToEdit ? updatedSponsor : s));
         setSponsorIdToEdit(null);
+        setShowSponsorForm(false);
         notify("Parceiro atualizado com sucesso!");
       } else {
         const newSponsor: Sponsor = {
@@ -404,10 +407,10 @@ const App: React.FC = () => {
         };
         await databaseService.addSponsor(newSponsor);
         setSponsors(prev => [newSponsor, ...prev]);
+        setShowSponsorForm(false);
         notify("Parceiro cadastrado com sucesso!");
       }
       setSponsorFormData(defaultSponsorFormData);
-      setShowSponsorForm(false);
       setSponsorLogoScale(1);
     } catch (e) {
       console.error("Erro ao salvar parceiro:", e);
@@ -441,40 +444,33 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
           const json = JSON.parse(event.target?.result as string);
           if (!json.members || !json.sponsors) {
             notify("Arquivo de backup inválido.");
             return;
           }
-          setPendingBackupData(json);
-          setPasswordPurpose('IMPORT_BACKUP');
-          setIsPasswordModalOpen(true);
+          
+          setLoading(true);
+          try {
+            // Processa a importação dos dados recebidos
+            for (const m of json.members) await databaseService.addMember(m);
+            for (const s of json.sponsors) await databaseService.addSponsor(s);
+            for (const p of (json.eventPhotos || [])) await databaseService.addEventPhoto(p);
+            
+            await loadData(); // Recarrega os dados na UI
+            notify("Sincronização concluída! Dados restaurados.");
+          } catch (err) {
+            notify("Erro durante a restauração dos dados.");
+          } finally {
+            setLoading(false);
+          }
         } catch (err) {
           notify("Erro ao ler o arquivo de backup.");
         }
       };
       reader.readAsText(file);
-    }
-  };
-
-  const processImport = async () => {
-    if (!pendingBackupData) return;
-    setLoading(true);
-    try {
-      // Importar os dados para o serviço de banco
-      for (const m of pendingBackupData.members) await databaseService.addMember(m);
-      for (const s of pendingBackupData.sponsors) await databaseService.addSponsor(s);
-      for (const p of (pendingBackupData.eventPhotos || [])) await databaseService.addEventPhoto(p);
-      
-      await loadData(); // Recarregar estado da UI
-      notify("Sincronização concluída! Dados restaurados.");
-    } catch (err) {
-      notify("Erro durante a restauração.");
-    } finally {
-      setLoading(false);
-      setPendingBackupData(null);
     }
   };
 
@@ -538,9 +534,10 @@ const App: React.FC = () => {
           setIsPasswordModalOpen(false);
           notify("Parceiro removido.");
         } catch (e) { notify("Erro ao remover parceiro."); }
-      } else if (passwordPurpose === 'IMPORT_BACKUP') {
+      } else if (passwordPurpose === 'IMPORT_BACKUP_REQUEST') {
         setIsPasswordModalOpen(false);
-        processImport();
+        // Abre o seletor de arquivos após confirmação da senha
+        importInputRef.current?.click();
       } else if (passwordPurpose === 'EXPORT_BACKUP') {
         setIsPasswordModalOpen(false);
         handleExportBackup();
@@ -1241,7 +1238,7 @@ const App: React.FC = () => {
                       <Download size={20} /> Exportar Backup
                     </button>
                     <button 
-                      onClick={() => importInputRef.current?.click()}
+                      onClick={() => { setPasswordPurpose('IMPORT_BACKUP_REQUEST'); setIsPasswordModalOpen(true); }}
                       className="w-full py-4 bg-[#F9B115] hover:bg-[#f9b215e4] text-[#2B4C7E] rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase shadow-lg"
                     >
                       <CloudUpload size={20} /> Importar e Sincronizar
@@ -1354,7 +1351,7 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-gray-700 bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-[#000] bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
