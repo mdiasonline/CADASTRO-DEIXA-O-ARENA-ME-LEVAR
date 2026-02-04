@@ -39,7 +39,13 @@ import {
   Pencil,
   Sparkles,
   Info,
-  ExternalLink
+  ExternalLink,
+  PieChart,
+  TrendingUp,
+  LayoutGrid,
+  CloudDownload,
+  CloudUpload,
+  FileJson
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -70,11 +76,12 @@ const App: React.FC = () => {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | 'IMPORT_BACKUP' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
   const [sponsorIdToEdit, setSponsorIdToEdit] = useState<string | null>(null);
+  const [pendingBackupData, setPendingBackupData] = useState<any>(null);
   
   const [showSponsorForm, setShowSponsorForm] = useState(false);
   const [isProcessingLogo, setIsProcessingLogo] = useState(false);
@@ -105,6 +112,7 @@ const App: React.FC = () => {
   const muralUploadRef = useRef<HTMLInputElement>(null);
   const faceSearchInputRef = useRef<HTMLInputElement>(null);
   const sponsorLogoInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const notify = (msg: string) => {
     setInfoMessage(msg);
@@ -408,6 +416,68 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExportBackup = () => {
+    const backupData = {
+      version: '1.9',
+      exportDate: new Date().toISOString(),
+      members,
+      eventPhotos,
+      sponsors
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `backup_arena_carnaval_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify("Backup exportado com sucesso!");
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const json = JSON.parse(event.target?.result as string);
+          if (!json.members || !json.sponsors) {
+            notify("Arquivo de backup inválido.");
+            return;
+          }
+          setPendingBackupData(json);
+          setPasswordPurpose('IMPORT_BACKUP');
+          setIsPasswordModalOpen(true);
+        } catch (err) {
+          notify("Erro ao ler o arquivo de backup.");
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const processImport = async () => {
+    if (!pendingBackupData) return;
+    setLoading(true);
+    try {
+      // Limpar banco local (opcional, aqui vamos mesclar ou substituir conforme lógica do service)
+      // Para simplicidade e eficácia, vamos percorrer e adicionar
+      for (const m of pendingBackupData.members) await databaseService.addMember(m);
+      for (const s of pendingBackupData.sponsors) await databaseService.addSponsor(s);
+      for (const p of (pendingBackupData.eventPhotos || [])) await databaseService.addEventPhoto(p);
+      
+      await loadData(); // Recarregar tudo
+      notify("Sincronização concluída! Dados restaurados.");
+    } catch (err) {
+      notify("Erro durante a restauração.");
+    } finally {
+      setLoading(false);
+      setPendingBackupData(null);
+    }
+  };
+
   const handleConfirmPassword = async () => {
     if (passwordInput.toUpperCase() === 'GARRINCHA') {
       if (passwordPurpose === 'DELETE' && memberIdToDelete) {
@@ -468,6 +538,9 @@ const App: React.FC = () => {
           setIsPasswordModalOpen(false);
           notify("Parceiro removido.");
         } catch (e) { notify("Erro ao remover parceiro."); }
+      } else if (passwordPurpose === 'IMPORT_BACKUP') {
+        setIsPasswordModalOpen(false);
+        processImport();
       }
     } else { 
       notify('SENHA INCORRETA!'); 
@@ -562,10 +635,15 @@ const App: React.FC = () => {
       byBloco[m.bloco] = (byBloco[m.bloco] || 0) + 1;
       byCargo[m.tipo] = (byCargo[m.tipo] || 0) + 1;
     });
+    
+    const sortedBlocos = Object.entries(byBloco).sort((a,b) => b[1]-a[1]);
+    const maxBlocoCount = sortedBlocos.length > 0 ? sortedBlocos[0][1] : 0;
+
     return {
-      byBloco: Object.entries(byBloco).sort((a,b) => b[1]-a[1]),
+      byBloco: sortedBlocos,
       byCargo: Object.entries(byCargo).sort((a,b) => b[1]-a[1]),
-      total: members.length
+      total: members.length,
+      maxBlocoCount
     };
   }, [members]);
 
@@ -622,7 +700,12 @@ const App: React.FC = () => {
               <h2 className="text-3xl font-arena text-[#C63D2F]">PARCEIROS</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Nossos Patrocinadores</p>
             </button>
-            <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+            <button onClick={() => setView(ViewMode.STATISTICS)} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all">
+              <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#2B4C7E]"><BarChart3 size={40} className="text-[#2B4C7E]" /></div>
+              <h2 className="text-3xl font-arena text-[#2B4C7E]">ESTATÍSTICAS</h2>
+              <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Dados da Folia</p>
+            </button>
+            <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className="arena-card p-10 group bg-white text-center hover:scale-[1.02] transition-all md:col-span-2">
               <div className="w-20 h-20 bg-[#F9E7C7] rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-[#C63D2F]"><Users size={40} className="text-[#C63D2F]" /></div>
               <h2 className="text-3xl font-arena text-[#C63D2F]">LISTA PRIVADA</h2>
               <p className="font-bold text-gray-400 uppercase text-[10px] tracking-widest mt-2">Apenas com Senha</p>
@@ -1067,21 +1150,113 @@ const App: React.FC = () => {
         )}
 
         {view === ViewMode.STATISTICS && (
-           <div className="space-y-8 animate-fadeIn pb-24">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="bg-[#2B4C7E] p-3 rounded-2xl"><BarChart3 className="text-white" size={32} /></div>
-                <h2 className="text-3xl font-arena text-[#2B4C7E]">DADOS DA FOLIA</h2>
+           <div className="space-y-10 animate-fadeIn pb-24">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="bg-[#2B4C7E] p-3 rounded-2xl border-b-4 border-r-4 border-[#F9B115] shadow-lg"><BarChart3 className="text-white" size={32} /></div>
+                  <div>
+                    <h2 className="text-3xl font-arena text-[#2B4C7E]">DASHBOARD ARENA</h2>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Painel de Monitoramento da Folia</p>
+                  </div>
+                </div>
+                <div className="bg-white/50 backdrop-blur-sm px-4 py-2 rounded-2xl border-2 border-[#2B4C7E]/10 flex items-center gap-3">
+                  <TrendingUp className="text-green-500" size={20} />
+                  <span className="text-xs font-bold text-[#2B4C7E] uppercase">Atualizado em Tempo Real</span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="arena-card p-8 text-center bg-white">
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Total de Foliões</h3>
-                  <p className="text-7xl font-arena text-[#2B4C7E]">{stats.total}</p>
+              {/* Grid de KPIs Principais */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="arena-card p-8 bg-white overflow-hidden group relative">
+                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><Users size={120} /></div>
+                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Total de Foliões</h3>
+                  <p className="text-7xl font-arena text-[#2B4C7E] relative z-10">{stats.total}</p>
+                  <div className="mt-4 flex items-center gap-2 text-green-500 font-black text-[10px] uppercase bg-green-50 w-fit px-2 py-1 rounded-lg">
+                    <TrendingUp size={12} /> Crescendo
+                  </div>
                 </div>
                 
-                <div className="arena-card p-8 text-center bg-white border-[#F9B115] shadow-[#F9B115]">
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1">Fotos do Evento</h3>
-                  <p className="text-7xl font-arena text-[#F9B115]">{eventPhotos.length}</p>
+                <div className="arena-card p-8 bg-white border-[#F9B115] shadow-[#F9B115] overflow-hidden group relative">
+                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><ImageIcon size={120} /></div>
+                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Fotos no Mural</h3>
+                  <p className="text-7xl font-arena text-[#F9B115] relative z-10">{eventPhotos.length}</p>
+                  <div className="mt-4 flex items-center gap-2 text-[#2B4C7E] font-black text-[10px] uppercase bg-[#F9B115]/10 w-fit px-2 py-1 rounded-lg">
+                    <Sparkles size={12} /> Brilhando
+                  </div>
+                </div>
+
+                <div className="arena-card p-8 bg-white border-[#C63D2F] shadow-[#C63D2F] overflow-hidden group relative md:col-span-1">
+                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><Handshake size={120} /></div>
+                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Parceiros Ativos</h3>
+                  <p className="text-7xl font-arena text-[#C63D2F] relative z-10">{sponsors.length}</p>
+                  <div className="mt-4 flex items-center gap-2 text-[#C63D2F] font-black text-[10px] uppercase bg-[#C63D2F]/10 w-fit px-2 py-1 rounded-lg">
+                    <ShieldCheck size={12} /> Verificados
+                  </div>
+                </div>
+              </div>
+
+              {/* Gráficos e Seção de Sincronização */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="arena-card p-8 bg-white">
+                  <div className="flex items-center gap-3 mb-8 border-b-2 border-gray-100 pb-4">
+                    <LayoutGrid size={24} className="text-[#2B4C7E]" />
+                    <h4 className="font-arena text-2xl text-[#2B4C7E]">FOLIÕES POR BLOCO</h4>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    {stats.byBloco.map(([bloco, count]) => (
+                      <div key={bloco} className="space-y-1.5">
+                        <div className="flex justify-between items-end px-1">
+                          <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider">{bloco}</span>
+                          <span className="font-arena text-[#2B4C7E]">{count}</span>
+                        </div>
+                        <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                          <div 
+                            className="h-full bg-gradient-to-r from-[#2B4C7E] to-[#F9B115] rounded-full transition-all duration-1000 ease-out"
+                            style={{ width: `${(count / stats.maxBlocoCount) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="arena-card p-8 bg-[#2B4C7E] text-white">
+                  <div className="flex items-center gap-3 mb-6 border-b-2 border-white/10 pb-4">
+                    <CloudDownload size={24} className="text-[#F9B115]" />
+                    <h4 className="font-arena text-2xl">CENTRAL DE SINCRONIZAÇÃO</h4>
+                  </div>
+                  <p className="text-[10px] font-bold opacity-60 uppercase mb-8 leading-relaxed">
+                    Use estas ferramentas para salvar seus dados localmente ou restaurá-los em outro dispositivo (Sincronização Manual).
+                  </p>
+                  
+                  <div className="space-y-4">
+                    <button 
+                      onClick={handleExportBackup}
+                      className="w-full py-4 bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase"
+                    >
+                      <Download size={20} /> Exportar Backup
+                    </button>
+                    <button 
+                      onClick={() => importInputRef.current?.click()}
+                      className="w-full py-4 bg-[#F9B115] hover:bg-[#f9b215e4] text-[#2B4C7E] rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase shadow-lg"
+                    >
+                      <CloudUpload size={20} /> Importar e Sincronizar
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={importInputRef} 
+                      accept=".json" 
+                      className="hidden" 
+                      onChange={handleImportFileChange} 
+                    />
+                  </div>
+                  <div className="mt-8 p-4 bg-black/20 rounded-xl border border-white/10 flex items-start gap-3">
+                    <AlertCircle size={20} className="text-[#F9B115] shrink-0" />
+                    <p className="text-[9px] font-bold opacity-70 uppercase leading-tight">
+                      A importação mesclará os dados novos com os já existentes. É necessária a senha de administrador.
+                    </p>
+                  </div>
                 </div>
               </div>
            </div>
@@ -1090,7 +1265,7 @@ const App: React.FC = () => {
 
       <footer className="mt-auto py-4 text-center">
         <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
-          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.7
+          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.9
         </p>
       </footer>
 
@@ -1176,7 +1351,7 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
@@ -1189,7 +1364,7 @@ const App: React.FC = () => {
           <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
           <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
           <button onClick={() => setView(ViewMode.SPONSORS)} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
+          <button onClick={() => setView(ViewMode.STATISTICS)} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
         </div>
       </nav>
 
