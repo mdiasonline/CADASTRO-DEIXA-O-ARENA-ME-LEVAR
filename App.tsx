@@ -76,7 +76,7 @@ const App: React.FC = () => {
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | 'IMPORT_BACKUP' | null>(null);
+  const [passwordPurpose, setPasswordPurpose] = useState<'DELETE' | 'VIEW_LIST' | 'VIEW_STATS' | 'DELETE_PHOTO' | 'DELETE_PHOTOS_BATCH' | 'ADD_SPONSOR' | 'EDIT_SPONSOR' | 'DELETE_SPONSOR' | 'IMPORT_BACKUP' | 'EXPORT_BACKUP' | null>(null);
   const [memberIdToDelete, setMemberIdToDelete] = useState<string | null>(null);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
@@ -147,6 +147,7 @@ const App: React.FC = () => {
         }
         resolve(canvas.toDataURL('image/png', quality));
       };
+      img.onerror = () => resolve(base64Str);
     });
   };
 
@@ -378,10 +379,10 @@ const App: React.FC = () => {
     }
     setLoading(true);
     
-    // Processar a imagem final com o zoom aplicado
-    const finalLogo = await compressImage(sponsorFormData.logo, 0.8, 400, sponsorLogoScale);
-
     try {
+      // Processar a imagem final apenas se necessário
+      const finalLogo = await compressImage(sponsorFormData.logo, 0.8, 400, sponsorLogoScale);
+
       if (sponsorIdToEdit) {
         const originalSponsor = sponsors.find(s => s.id === sponsorIdToEdit);
         const updatedSponsor: Sponsor = {
@@ -418,7 +419,7 @@ const App: React.FC = () => {
 
   const handleExportBackup = () => {
     const backupData = {
-      version: '1.9',
+      version: '2.2',
       exportDate: new Date().toISOString(),
       members,
       eventPhotos,
@@ -462,13 +463,12 @@ const App: React.FC = () => {
     if (!pendingBackupData) return;
     setLoading(true);
     try {
-      // Limpar banco local (opcional, aqui vamos mesclar ou substituir conforme lógica do service)
-      // Para simplicidade e eficácia, vamos percorrer e adicionar
+      // Importar os dados para o serviço de banco
       for (const m of pendingBackupData.members) await databaseService.addMember(m);
       for (const s of pendingBackupData.sponsors) await databaseService.addSponsor(s);
       for (const p of (pendingBackupData.eventPhotos || [])) await databaseService.addEventPhoto(p);
       
-      await loadData(); // Recarregar tudo
+      await loadData(); // Recarregar estado da UI
       notify("Sincronização concluída! Dados restaurados.");
     } catch (err) {
       notify("Erro durante a restauração.");
@@ -541,6 +541,9 @@ const App: React.FC = () => {
       } else if (passwordPurpose === 'IMPORT_BACKUP') {
         setIsPasswordModalOpen(false);
         processImport();
+      } else if (passwordPurpose === 'EXPORT_BACKUP') {
+        setIsPasswordModalOpen(false);
+        handleExportBackup();
       }
     } else { 
       notify('SENHA INCORRETA!'); 
@@ -1232,7 +1235,7 @@ const App: React.FC = () => {
                   
                   <div className="space-y-4">
                     <button 
-                      onClick={handleExportBackup}
+                      onClick={() => { setPasswordPurpose('EXPORT_BACKUP'); setIsPasswordModalOpen(true); }}
                       className="w-full py-4 bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase"
                     >
                       <Download size={20} /> Exportar Backup
@@ -1265,7 +1268,7 @@ const App: React.FC = () => {
 
       <footer className="mt-auto py-4 text-center">
         <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
-          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v1.9
+          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v2.2
         </p>
       </footer>
 
@@ -1351,7 +1354,7 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-gray-700 bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
@@ -1365,6 +1368,7 @@ const App: React.FC = () => {
           <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
           <button onClick={() => setView(ViewMode.SPONSORS)} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
           <button onClick={() => setView(ViewMode.STATISTICS)} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
+          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
         </div>
       </nav>
 
