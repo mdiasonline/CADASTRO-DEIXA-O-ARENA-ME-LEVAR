@@ -24,6 +24,7 @@ export interface Sponsor {
   telefone: string;
   descricao?: string;
   createdAt: number;
+  clicks?: number;
 }
 
 export enum ViewMode {
