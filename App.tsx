@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
   const [sponsorIdToDelete, setSponsorIdToDelete] = useState<string | null>(null);
   const [sponsorIdToEdit, setSponsorIdToEdit] = useState<string | null>(null);
+  const [pendingBackupData, setPendingBackupData] = useState<any>(null);
   
   const [showSponsorForm, setShowSponsorForm] = useState(false);
   const [isProcessingLogo, setIsProcessingLogo] = useState(false);
@@ -464,7 +465,6 @@ const App: React.FC = () => {
             notify("Erro durante a restauração dos dados.");
           } finally {
             setLoading(false);
-            if (importInputRef.current) importInputRef.current.value = "";
           }
         } catch (err) {
           notify("Erro ao ler o arquivo de backup.");
@@ -1351,7 +1351,7 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
             <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-[#000] bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
+              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-[#000] bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
               <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
             </div>
           </div>
