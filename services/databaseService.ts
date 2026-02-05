@@ -13,7 +13,6 @@ interface DBProvider {
   addSponsor(sponsor: Sponsor): Promise<void>;
   updateSponsor(sponsor: Sponsor): Promise<void>;
   deleteSponsor(id: string): Promise<void>;
-  incrementSponsorClicks(id: string): Promise<void>;
   isLocal: boolean;
 }
 
@@ -51,17 +50,13 @@ const localProvider: DBProvider = {
   },
   async addSponsor(sponsor: Sponsor): Promise<void> {
     const sponsors = await this.getSponsors();
-    // Inicia clicks com 0 se não existir
-    const newSponsor = { ...sponsor, clicks: 0 };
-    localStorage.setItem('carnaval_sponsors', JSON.stringify([newSponsor, ...sponsors]));
+    localStorage.setItem('carnaval_sponsors', JSON.stringify([sponsor, ...sponsors]));
   },
   async updateSponsor(sponsor: Sponsor): Promise<void> {
     const sponsors = await this.getSponsors();
     const index = sponsors.findIndex(s => s.id === sponsor.id);
     if (index !== -1) {
-      // Preserva os clicks atuais se não forem passados
-      const currentClicks = sponsors[index].clicks || 0;
-      sponsors[index] = { ...sponsor, clicks: sponsor.clicks ?? currentClicks };
+      sponsors[index] = sponsor;
       localStorage.setItem('carnaval_sponsors', JSON.stringify(sponsors));
     }
   },
@@ -69,14 +64,6 @@ const localProvider: DBProvider = {
     const sponsors = await this.getSponsors();
     const filtered = sponsors.filter(s => s.id !== id);
     localStorage.setItem('carnaval_sponsors', JSON.stringify(filtered));
-  },
-  async incrementSponsorClicks(id: string): Promise<void> {
-    const sponsors = await this.getSponsors();
-    const index = sponsors.findIndex(s => s.id === id);
-    if (index !== -1) {
-      sponsors[index].clicks = (sponsors[index].clicks || 0) + 1;
-      localStorage.setItem('carnaval_sponsors', JSON.stringify(sponsors));
-    }
   }
 };
 
@@ -167,13 +154,14 @@ const getProvider = (): DBProvider => {
       return (data as Sponsor[]) || [];
     },
     async addSponsor(sponsor: Sponsor): Promise<void> {
-      // Inicia com 0 clicks
       const { error } = await supabaseInstance!
         .from('patrocinadores')
-        .insert([{ ...sponsor, clicks: 0 }]);
+        .insert([sponsor]);
       if (error) throw error;
     },
     async updateSponsor(sponsor: Sponsor): Promise<void> {
+      // O Supabase pode falhar ao tentar atualizar a própria coluna ID, mesmo que o valor seja o mesmo.
+      // Removemos o ID do corpo do objeto enviado para .update()
       const { id, ...dataToUpdate } = sponsor;
       const { error } = await supabaseInstance!
         .from('patrocinadores')
@@ -187,22 +175,6 @@ const getProvider = (): DBProvider => {
         .delete()
         .eq('id', id);
       if (error) throw error;
-    },
-    async incrementSponsorClicks(id: string): Promise<void> {
-      // Abordagem simples: lê o valor atual e incrementa
-      // Idealmente seria uma RPC, mas isso funciona para este caso
-      const { data } = await supabaseInstance!
-        .from('patrocinadores')
-        .select('clicks')
-        .eq('id', id)
-        .single();
-      
-      const currentClicks = data?.clicks || 0;
-      
-      await supabaseInstance!
-        .from('patrocinadores')
-        .update({ clicks: currentClicks + 1 })
-        .eq('id', id);
     }
   };
 };
@@ -218,6 +190,5 @@ export const databaseService = {
   getSponsors: () => getProvider().getSponsors(),
   addSponsor: (s: Sponsor) => getProvider().addSponsor(s),
   updateSponsor: (s: Sponsor) => getProvider().updateSponsor(s),
-  deleteSponsor: (id: string) => getProvider().deleteSponsor(id),
-  incrementSponsorClicks: (id: string) => getProvider().incrementSponsorClicks(id)
+  deleteSponsor: (id: string) => getProvider().deleteSponsor(id)
 };
