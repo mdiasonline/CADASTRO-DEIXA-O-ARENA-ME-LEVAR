@@ -51,7 +51,7 @@ const localProvider: DBProvider = {
   },
   async addSponsor(sponsor: Sponsor): Promise<void> {
     const sponsors = await this.getSponsors();
-    // Garante que clicks comece com 0
+    // Inicia clicks com 0 se não existir
     const newSponsor = { ...sponsor, clicks: 0 };
     localStorage.setItem('carnaval_sponsors', JSON.stringify([newSponsor, ...sponsors]));
   },
@@ -59,9 +59,9 @@ const localProvider: DBProvider = {
     const sponsors = await this.getSponsors();
     const index = sponsors.findIndex(s => s.id === sponsor.id);
     if (index !== -1) {
-      // Preserva os clicks existentes se não vierem no update
-      const existingClicks = sponsors[index].clicks || 0;
-      sponsors[index] = { ...sponsor, clicks: sponsor.clicks ?? existingClicks };
+      // Preserva os clicks atuais se não forem passados
+      const currentClicks = sponsors[index].clicks || 0;
+      sponsors[index] = { ...sponsor, clicks: sponsor.clicks ?? currentClicks };
       localStorage.setItem('carnaval_sponsors', JSON.stringify(sponsors));
     }
   },
@@ -167,9 +167,10 @@ const getProvider = (): DBProvider => {
       return (data as Sponsor[]) || [];
     },
     async addSponsor(sponsor: Sponsor): Promise<void> {
+      // Inicia com 0 clicks
       const { error } = await supabaseInstance!
         .from('patrocinadores')
-        .insert([{...sponsor, clicks: 0}]);
+        .insert([{ ...sponsor, clicks: 0 }]);
       if (error) throw error;
     },
     async updateSponsor(sponsor: Sponsor): Promise<void> {
@@ -188,7 +189,8 @@ const getProvider = (): DBProvider => {
       if (error) throw error;
     },
     async incrementSponsorClicks(id: string): Promise<void> {
-      // Abordagem simples de leitura e escrita para compatibilidade sem RPC
+      // Abordagem simples: lê o valor atual e incrementa
+      // Idealmente seria uma RPC, mas isso funciona para este caso
       const { data } = await supabaseInstance!
         .from('patrocinadores')
         .select('clicks')
