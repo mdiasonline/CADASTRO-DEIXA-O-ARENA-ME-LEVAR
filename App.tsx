@@ -664,17 +664,22 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-[#2B4C7E] text-white py-6 md:py-8 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4 flex flex-col items-center justify-center">
+      <header className="bg-[#2B4C7E] text-white py-4 md:py-6 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
+        <div className="container mx-auto px-4 flex justify-center">
           <div 
             className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
             onClick={() => setView(ViewMode.HOME)}
           >
-            <div className="flex flex-col text-center">
+            <img 
+              src="https://github.com/mdiasonline/CADASTRO-DEIXA-O-ARENA-ME-LEVAR/blob/main/ICONE_TITULO.png?raw=true" 
+              className="w-16 h-16 md:w-24 md:h-24 object-contain drop-shadow-md"
+              alt="Logo Arena"
+            />
+            <div className="flex flex-col text-left">
               <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
                 DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
               </h1>
-              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1">
+              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1 ml-1">
                 Carnaval <span className="text-[#F9B115]">2026</span>
               </div>
             </div>
