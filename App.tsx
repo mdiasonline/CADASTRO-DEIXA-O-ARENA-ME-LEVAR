@@ -45,7 +45,8 @@ import {
   LayoutGrid,
   CloudDownload,
   CloudUpload,
-  FileJson
+  FileJson,
+  MousePointerClick
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -388,6 +389,7 @@ const App: React.FC = () => {
           ...sponsorFormData,
           id: sponsorIdToEdit,
           logo: finalLogo,
+          clicks: originalSponsor?.clicks || 0,
           createdAt: originalSponsor?.createdAt || Date.now()
         };
         
@@ -403,6 +405,7 @@ const App: React.FC = () => {
           id: Math.random().toString(36).substring(7),
           ...sponsorFormData,
           logo: finalLogo,
+          clicks: 0,
           createdAt: Date.now()
         };
         await databaseService.addSponsor(newSponsor);
@@ -417,6 +420,19 @@ const App: React.FC = () => {
       notify("Erro ao salvar parceiro. Verifique sua conexão.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSponsorClick = async (sponsor: Sponsor) => {
+    // Atualiza a UI otimisticamente
+    setSponsors(prev => prev.map(s => s.id === sponsor.id ? { ...s, clicks: (s.clicks || 0) + 1 } : s));
+    setViewingSponsor(sponsor);
+    
+    // Atualiza no backend sem bloquear a UI
+    try {
+      await databaseService.incrementSponsorClicks(sponsor.id);
+    } catch (error) {
+      console.error("Falha ao contabilizar clique:", error);
     }
   };
 
@@ -664,18 +680,23 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-[#2B4C7E] text-white py-6 md:py-8 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
-        <div className="container mx-auto px-4 flex flex-col items-center justify-center">
+      <header className="bg-[#2B4C7E] text-white py-4 md:py-6 shadow-xl border-b-4 border-[#F9B115] sticky top-0 z-50">
+        <div className="container mx-auto px-4 flex justify-center">
           <div 
             className="flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform active:scale-95" 
             onClick={() => setView(ViewMode.HOME)}
           >
-            <div className="flex flex-col text-center">
+            <img 
+              src="https://github.com/mdiasonline/CADASTRO-DEIXA-O-ARENA-ME-LEVAR/blob/main/ICONE_TITULO.png?raw=true" 
+              className="w-16 h-16 md:w-24 md:h-24 object-contain drop-shadow-md"
+              alt="Logo Arena"
+            />
+            <div className="flex flex-col text-left">
               <h1 className="text-2xl md:text-5xl font-arena tracking-tighter leading-tight">
                 DEIXA O <span className="text-[#F9B115]">ARENA ME LEVAR</span>
               </h1>
-              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] opacity-80 -mt-1">
-                Carnaval <span className="text-[#F9B115]">2026</span>
+              <div className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.1em] opacity-80 -mt-1 ml-1">
+             Carnaval <span className="text-[#F9B115]">2026</span>
               </div>
             </div>
           </div>
@@ -903,7 +924,7 @@ const App: React.FC = () => {
                  {sponsors.map(s => (
                    <div 
                     key={s.id} 
-                    onClick={() => setViewingSponsor(s)}
+                    onClick={() => handleSponsorClick(s)}
                     className="arena-card p-6 bg-white border-gray-200 shadow-gray-200 flex flex-col items-center text-center group relative overflow-hidden transition-all hover:border-[#C63D2F] cursor-pointer"
                    >
                      <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -922,6 +943,13 @@ const App: React.FC = () => {
                          <Trash2 size={14} />
                        </button>
                      </div>
+                     
+                     {/* Contador de Visualizações */}
+                     <div className="absolute top-2 left-2 flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full text-[9px] font-black text-gray-500 border border-gray-200">
+                       <MousePointerClick size={10} />
+                       {s.clicks || 0}
+                     </div>
+
                      <div className="w-32 h-32 mb-4 flex items-center justify-center bg-transparent rounded-2xl overflow-hidden">
                         <img src={s.logo} className="max-w-full max-h-full object-contain p-2" style={{ mixBlendMode: 'multiply' }} alt={s.nome} />
                      </div>
@@ -945,444 +973,287 @@ const App: React.FC = () => {
         )}
 
         {view === ViewMode.PHOTOS && (
-          <div className="space-y-6 animate-fadeIn pb-24">
-            <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border-4 border-[#F9B115] shadow-lg">
-              <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-2xl border-2 border-[#2B4C7E] bg-[#F9E7C7] flex items-center justify-center overflow-hidden">
-                      {faceSearchRef ? <img src={faceSearchRef} className="w-full h-full object-cover" /> : <ScanFace className="text-[#2B4C7E]" size={32} />}
-                    </div>
-                    {isFacialSearching && <div className="absolute inset-0 bg-white/60 flex items-center justify-center"><Loader2 className="animate-spin text-[#2B4C7E]" size={20} /></div>}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-arena text-[#2B4C7E]">MURAL DA FOLIA</h2>
-                    <p className="text-[10px] font-black uppercase text-gray-400">Localize suas fotos na folia • {eventPhotos.length} fotos postadas</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  <button 
-                    onClick={() => {
-                      setIsSelectionMode(!isSelectionMode);
-                      setSelectedPhotoIds([]);
-                    }} 
-                    className={`flex-grow md:flex-none px-4 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 transition-all ${isSelectionMode ? 'bg-[#2B4C7E] text-white border-[#2B4C7E]' : 'bg-white text-[#2B4C7E] border-[#2B4C7E]'}`}
-                  >
-                    {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
-                    {isSelectionMode ? 'Cancelar' : 'Selecionar'}
-                  </button>
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h2 className="text-3xl font-arena text-[#F9B115] uppercase flex items-center gap-2">
+                <ImageIcon size={32} /> Mural da Folia
+              </h2>
+              <div className="flex flex-wrap justify-center gap-2">
+                 <button onClick={() => muralUploadRef.current?.click()} className="btn-arena px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+                   <Upload size={16} /> POSTAR FOTO
+                 </button>
+                 <input type="file" ref={muralUploadRef} multiple accept="image/*" className="hidden" onChange={handleMuralUpload} />
+                 
+                 <button onClick={() => faceSearchInputRef.current?.click()} className="btn-arena px-4 py-2 rounded-xl text-sm flex items-center gap-2 bg-[#2B4C7E]">
+                   <ScanFace size={16} /> ACHAR MEU ROSTO
+                 </button>
+                 <input type="file" ref={faceSearchInputRef} accept="image/*" className="hidden" onChange={handleFaceSearchUpload} />
 
-                  {!isSelectionMode && (
-                    <>
-                      {matchedPhotoIds ? (
-                        <button onClick={clearFaceFilter} className="flex-grow md:flex-none px-4 py-3 bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase">
-                          <RefreshCcw size={16} /> Ver Tudo
-                        </button>
-                      ) : (
-                        <button onClick={() => faceSearchInputRef.current?.click()} className="flex-grow md:flex-none px-4 py-3 bg-[#F9B115] text-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase border-2 border-[#2B4C7E] hover:scale-105 transition-transform">
-                          <ScanFace size={20} /> Me Localizar
-                        </button>
-                      )}
-                      <button onClick={() => muralUploadRef.current?.click()} className="flex-grow md:flex-none btn-arena px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-arena" disabled={loading}>
-                        {loading ? <Loader2 className="animate-spin" /> : <><PlusCircle size={20} /> POSTAR</>}
-                      </button>
-                    </>
-                  )}
-                </div>
+                 <button onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsSelectionMode(!isSelectionMode); }} className={`btn-arena px-4 py-2 rounded-xl text-sm flex items-center gap-2 ${isSelectionMode ? 'bg-red-500' : 'bg-gray-500'}`}>
+                   {isSelectionMode ? <X size={16} /> : <CheckSquare size={16} />} {isSelectionMode ? 'CANCELAR' : 'SELECIONAR'}
+                 </button>
               </div>
-
-              {isSelectionMode && (
-                <div className="flex flex-wrap gap-2 w-full pt-4 border-t-2 border-gray-100 animate-slideUp">
-                  <button 
-                    onClick={handleSelectAll}
-                    className="flex-grow p-3 bg-white text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:bg-gray-50 transition-colors"
-                  >
-                    <CheckCheck size={18} />
-                    {selectedPhotoIds.length === filteredMuralPhotos.length && filteredMuralPhotos.length > 0 ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
-                  </button>
-                  
-                  {selectedPhotoIds.length > 0 && (
-                    <>
-                      <button 
-                        onClick={handleDownloadSelected}
-                        className="flex-grow p-3 bg-[#F9B115] text-[#2B4C7E] border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
-                      >
-                        <Download size={18} />
-                        Baixar ({selectedPhotoIds.length})
-                      </button>
-                      <button 
-                        onClick={() => { setPasswordPurpose('DELETE_PHOTOS_BATCH'); setIsPasswordModalOpen(true); }}
-                        className="flex-grow p-3 bg-[#C63D2F] text-white border-2 border-[#2B4C7E] rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase hover:scale-[1.02] transition-transform"
-                      >
-                        <Trash2 size={18} />
-                        Excluir ({selectedPhotoIds.length})
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              
-              <input type="file" ref={muralUploadRef} accept="image/*" className="hidden" onChange={handleMuralUpload} multiple />
-              <input type="file" ref={faceSearchInputRef} accept="image/*" capture="user" className="hidden" onChange={handleFaceSearchUpload} />
             </div>
 
-            {fetching ? (
-              <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F9B115]" size={40} /></div>
-            ) : filteredMuralPhotos.length === 0 ? (
-              <div className="text-center py-20 opacity-30">
-                <ImageIcon size={64} className="mx-auto mb-4" />
-                <p className="font-arena text-2xl uppercase">{matchedPhotoIds ? "Nenhuma correspondência encontrada" : "MURAL VAZIO"}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                {filteredMuralPhotos.map(p => (
-                  <div 
-                    key={p.id} 
-                    onClick={() => isSelectionMode ? togglePhotoSelection(p.id) : setViewingPhoto(p)}
-                    className={`arena-card overflow-hidden bg-white group hover:scale-[1.02] transition-transform relative cursor-pointer ${isSelectionMode && selectedPhotoIds.includes(p.id) ? 'border-[#F9B115] ring-4 ring-[#F9B115]/30' : ''}`}
-                  >
-                    {isSelectionMode && (
-                      <div className="absolute top-2 left-2 z-30">
-                        {selectedPhotoIds.includes(p.id) ? (
-                          <div className="bg-[#F9B115] p-1 rounded-lg text-[#2B4C7E] border-2 border-[#2B4C7E] shadow-md animate-fadeIn">
-                            <CheckSquare size={20} />
-                          </div>
-                        ) : (
-                          <div className="bg-white/80 backdrop-blur-sm p-1 rounded-lg text-gray-400 border-2 border-gray-300 shadow-md">
-                            <Square size={20} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {!isSelectionMode && (
-                      <div className="absolute top-2 right-2 z-30 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(p.url, p.id); }} className="p-2 bg-white/90 text-[#2B4C7E] rounded-lg shadow-sm backdrop-blur-sm border border-[#2B4C7E]/20"><Download size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleSharePhoto(p.url); }} className="p-2 bg-[#25D366]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#25D366]/20"><Share2 size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPhotoIdToDelete(p.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-[#C63D2F]/90 text-white rounded-lg shadow-sm backdrop-blur-sm border border-[#C63D2F]/20"><Trash2 size={14} /></button>
-                      </div>
-                    )}
-
-                    <div className="aspect-square relative">
-                      <img src={p.url} className="w-full h-full object-cover" loading="lazy" />
-                    </div>
+            {matchedPhotoIds && (
+               <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r flex justify-between items-center animate-slideUp">
+                  <div className="flex items-center gap-3">
+                     <ScanFace className="text-green-600" size={24} />
+                     <div>
+                       <h3 className="font-bold text-green-800">Busca Facial Concluída</h3>
+                       <p className="text-sm text-green-700">Encontramos {matchedPhotoIds.length} fotos suas!</p>
+                     </div>
                   </div>
-                ))}
+                  <button onClick={clearFaceFilter} className="p-2 hover:bg-green-100 rounded-full text-green-700"><X size={20} /></button>
+               </div>
+            )}
+            
+            {isSelectionMode && selectedPhotoIds.length > 0 && (
+              <div className="sticky top-24 z-30 bg-[#2B4C7E] text-white p-4 rounded-xl shadow-lg flex justify-between items-center animate-slideUp">
+                <span className="font-bold">{selectedPhotoIds.length} selecionadas</span>
+                <div className="flex gap-2">
+                   <button onClick={handleDownloadSelected} className="p-2 bg-white/20 rounded-lg hover:bg-white/30"><Download size={20} /></button>
+                   <button onClick={() => setIsPasswordModalOpen(true)} className="p-2 bg-red-500 rounded-lg hover:bg-red-600"><Trash2 size={20} /></button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+               {filteredMuralPhotos.map(photo => (
+                 <div key={photo.id} className={`aspect-square relative group rounded-xl overflow-hidden cursor-pointer ${selectedPhotoIds.includes(photo.id) ? 'ring-4 ring-[#F9B115]' : ''}`} onClick={() => isSelectionMode ? togglePhotoSelection(photo.id) : setViewingPhoto(photo)}>
+                   <img src={photo.url} className="w-full h-full object-cover transition-transform group-hover:scale-110" loading="lazy" />
+                   {isSelectionMode && (
+                     <div className="absolute top-2 right-2">
+                       {selectedPhotoIds.includes(photo.id) ? <CheckCheck className="text-[#F9B115] fill-white" size={24} /> : <Square className="text-white drop-shadow-md" size={24} />}
+                     </div>
+                   )}
+                   {!isSelectionMode && (
+                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Maximize2 className="text-white" size={32} />
+                     </div>
+                   )}
+                 </div>
+               ))}
+            </div>
+            {filteredMuralPhotos.length === 0 && (
+              <div className="text-center py-20 opacity-40">
+                <ImageIcon size={64} className="mx-auto mb-4" />
+                <p className="font-arena text-2xl">Nenhuma foto no mural...</p>
               </div>
             )}
           </div>
         )}
 
-        {view === ViewMode.LIST && (
-           <div className="space-y-6 animate-fadeIn pb-24">
-              <div className="flex flex-col gap-4">
-                <div className="bg-white p-4 rounded-[2rem] border-4 border-[#2B4C7E] flex items-center gap-3 shadow-[8px_8px_0px_#2B4C7E]">
-                  <Search className="text-[#2B4C7E]" />
-                  <input placeholder="PESQUISAR POR NOME OU BLOCO..." className="w-full outline-none font-bold text-[#2B4C7E] placeholder:opacity-30" onChange={e => setSearchTerm(e.target.value)} />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative">
-                    <select 
-                      value={blocoFilter} 
-                      onChange={e => setBlocoFilter(e.target.value)}
-                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
-                    >
-                      <option value="">TODOS OS BLOCOS</option>
-                      {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><Filter size={16} /></div>
-                  </div>
-                  <div className="relative">
-                    <select 
-                      value={cargoFilter} 
-                      onChange={e => setCargoFilter(e.target.value)}
-                      className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 focus:border-[#2B4C7E] outline-none font-bold text-[#2B4C7E] bg-white appearance-none text-xs uppercase tracking-widest"
-                    >
-                      <option value="">TODOS OS CARGOS</option>
-                      {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ShieldCheck size={16} /></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-6">
-                {filteredMembers.map(m => (
-                  <div key={m.id} className="bg-white p-5 rounded-3xl border-2 border-[#2B4C7E]/30 flex flex-col md:flex-row items-center gap-6 shadow-sm hover:border-[#F9B115] transition-colors group">
-                    <div className="w-20 h-20 rounded-2xl border-2 border-[#2B4C7E] overflow-hidden shrink-0 shadow-md">
-                      {m.photo ? <img src={m.photo} className="w-full h-full object-cover" /> : <User className="p-4 text-gray-200" />}
-                    </div>
-                    <div className="flex-grow text-center md:text-left space-y-1">
-                      <div className="flex flex-col md:flex-row md:items-center gap-2">
-                        <h4 className="font-arena text-2xl leading-none text-[#2B4C7E]">{m.nome}</h4>
-                        <span className="text-[10px] font-black uppercase text-[#F9B115] bg-[#2B4C7E] px-2 py-0.5 rounded-lg w-fit mx-auto md:mx-0">{m.tipo}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-2">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-[#F9B115]"></div>
-                          <span className="text-xs font-bold uppercase text-gray-500">{m.bloco}</span>
-                        </div>
-                        {m.apto && (
-                          <div className="flex items-center gap-1.5">
-                            <Home size={12} className="text-gray-400" />
-                            <span className="text-xs font-bold text-gray-400">APTO: {m.apto}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5">
-                          <MessageCircle size={12} className="text-green-500" />
-                          <span className="text-xs font-bold text-gray-400">{m.celular}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <CalendarDays size={12} className="text-[#2B4C7E]" />
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">{new Date(m.createdAt).toLocaleDateString('pt-BR')}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 w-full md:w-auto">
-                       <a href={`https://wa.me/55${m.celular.replace(/\D/g,'')}`} target="_blank" className="flex-grow md:flex-none p-4 bg-[#25D366] text-white rounded-2xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center"><MessageCircle size={20} /></a>
-                       <button onClick={() => { setMemberIdToDelete(m.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="flex-grow md:flex-none p-4 bg-[#C63D2F]/10 text-[#C63D2F] rounded-2xl hover:bg-[#C63D2F] hover:text-white transition-all flex items-center justify-center"><Trash2 size={20} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-           </div>
-        )}
-
         {view === ViewMode.STATISTICS && (
-           <div className="space-y-10 animate-fadeIn pb-24">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="bg-[#2B4C7E] p-3 rounded-2xl border-b-4 border-r-4 border-[#F9B115] shadow-lg"><BarChart3 className="text-white" size={32} /></div>
-                  <div>
-                    <h2 className="text-3xl font-arena text-[#2B4C7E]">DASHBOARD ARENA</h2>
-                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Painel de Monitoramento da Folia</p>
-                  </div>
-                </div>
-                <div className="bg-white/50 backdrop-blur-sm px-4 py-2 rounded-2xl border-2 border-[#2B4C7E]/10 flex items-center gap-3">
-                  <TrendingUp className="text-green-500" size={20} />
-                  <span className="text-xs font-bold text-[#2B4C7E] uppercase">Atualizado em Tempo Real</span>
-                </div>
+           <div className="space-y-6 animate-fadeIn">
+              <h2 className="text-3xl font-arena text-[#2B4C7E] uppercase flex items-center gap-2 mb-6">
+                <BarChart3 size={32} /> Estatísticas da Folia
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="arena-card bg-white p-6 flex flex-col items-center justify-center">
+                    <Users size={40} className="text-[#2B4C7E] mb-2" />
+                    <h3 className="text-4xl font-black text-[#2B4C7E]">{stats.total}</h3>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total de Foliões</p>
+                 </div>
+                 <div className="arena-card bg-white p-6 flex flex-col items-center justify-center">
+                    <LayoutGrid size={40} className="text-[#F9B115] mb-2" />
+                    <h3 className="text-4xl font-black text-[#F9B115]">{stats.byBloco.length}</h3>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Blocos Ativos</p>
+                 </div>
+                 <div className="arena-card bg-white p-6 flex flex-col items-center justify-center">
+                    <Trophy size={40} className="text-[#C63D2F] mb-2" />
+                    <h3 className="text-2xl font-black text-[#C63D2F] text-center">{stats.byBloco[0]?.[0] || '-'}</h3>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Maior Bloco</p>
+                 </div>
               </div>
 
-              {/* Grid de KPIs Principais */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                <div className="arena-card p-8 bg-white overflow-hidden group relative">
-                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><Users size={120} /></div>
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Total de Foliões</h3>
-                  <p className="text-7xl font-arena text-[#2B4C7E] relative z-10">{stats.total}</p>
-                  <div className="mt-4 flex items-center gap-2 text-green-500 font-black text-[10px] uppercase bg-green-50 w-fit px-2 py-1 rounded-lg">
-                    <TrendingUp size={12} /> Crescendo
-                  </div>
-                </div>
-                
-                <div className="arena-card p-8 bg-white border-[#F9B115] shadow-[#F9B115] overflow-hidden group relative">
-                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><ImageIcon size={120} /></div>
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Fotos no Mural</h3>
-                  <p className="text-7xl font-arena text-[#F9B115] relative z-10">{eventPhotos.length}</p>
-                  <div className="mt-4 flex items-center gap-2 text-[#2B4C7E] font-black text-[10px] uppercase bg-[#F9B115]/10 w-fit px-2 py-1 rounded-lg">
-                    <Sparkles size={12} /> Brilhando
-                  </div>
-                </div>
-
-                <div className="arena-card p-8 bg-white border-[#C63D2F] shadow-[#C63D2F] overflow-hidden group relative md:col-span-1">
-                  <div className="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><Handshake size={120} /></div>
-                  <h3 className="font-black uppercase text-[10px] text-gray-400 tracking-widest mb-1 relative z-10">Parceiros Ativos</h3>
-                  <p className="text-7xl font-arena text-[#C63D2F] relative z-10">{sponsors.length}</p>
-                  <div className="mt-4 flex items-center gap-2 text-[#C63D2F] font-black text-[10px] uppercase bg-[#C63D2F]/10 w-fit px-2 py-1 rounded-lg">
-                    <ShieldCheck size={12} /> Verificados
-                  </div>
-                </div>
-              </div>
-
-              {/* Gráficos e Seção de Sincronização */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="arena-card p-8 bg-white">
-                  <div className="flex items-center gap-3 mb-8 border-b-2 border-gray-100 pb-4">
-                    <LayoutGrid size={24} className="text-[#2B4C7E]" />
-                    <h4 className="font-arena text-2xl text-[#2B4C7E]">FOLIÕES POR BLOCO</h4>
-                  </div>
-                  
-                  <div className="space-y-6">
-                    {stats.byBloco.map(([bloco, count]) => (
-                      <div key={bloco} className="space-y-1.5">
-                        <div className="flex justify-between items-end px-1">
-                          <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider">{bloco}</span>
-                          <span className="font-arena text-[#2B4C7E]">{count}</span>
-                        </div>
-                        <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                          <div 
-                            className="h-full bg-gradient-to-r from-[#2B4C7E] to-[#F9B115] rounded-full transition-all duration-1000 ease-out"
-                            style={{ width: `${(count / stats.maxBlocoCount) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="arena-card p-8 bg-[#2B4C7E] text-white">
-                  <div className="flex items-center gap-3 mb-6 border-b-2 border-white/10 pb-4">
-                    <CloudDownload size={24} className="text-[#F9B115]" />
-                    <h4 className="font-arena text-2xl">CENTRAL DE SINCRONIZAÇÃO</h4>
-                  </div>
-                  <p className="text-[10px] font-bold opacity-60 uppercase mb-8 leading-relaxed">
-                    Use estas ferramentas para salvar seus dados localmente ou restaurá-los em outro dispositivo (Sincronização Manual).
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <button 
-                      onClick={() => { setPasswordPurpose('EXPORT_BACKUP'); setIsPasswordModalOpen(true); }}
-                      className="w-full py-4 bg-white/10 hover:bg-white/20 border-2 border-white/20 rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase"
-                    >
-                      <Download size={20} /> Exportar Backup
-                    </button>
-                    <button 
-                      onClick={() => { setPasswordPurpose('IMPORT_BACKUP_REQUEST'); setIsPasswordModalOpen(true); }}
-                      className="w-full py-4 bg-[#F9B115] hover:bg-[#f9b215e4] text-[#2B4C7E] rounded-2xl flex items-center justify-center gap-3 transition-all font-arena text-xl uppercase shadow-lg"
-                    >
-                      <CloudUpload size={20} /> Importar e Sincronizar
-                    </button>
-                    <input 
-                      type="file" 
-                      ref={importInputRef} 
-                      accept=".json" 
-                      className="hidden" 
-                      onChange={handleImportFileChange} 
-                    />
-                  </div>
-                  <div className="mt-8 p-4 bg-black/20 rounded-xl border border-white/10 flex items-start gap-3">
-                    <AlertCircle size={20} className="text-[#F9B115] shrink-0" />
-                    <p className="text-[9px] font-bold opacity-70 uppercase leading-tight">
-                      A importação mesclará os dados novos com os já existentes. É necessária a senha de administrador.
-                    </p>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="arena-card bg-white p-6">
+                    <h3 className="font-arena text-xl text-[#2B4C7E] mb-4 flex items-center gap-2"><PieChart size={20}/> Foliões por Bloco</h3>
+                    <div className="space-y-3">
+                       {stats.byBloco.map(([bloco, count]) => (
+                         <div key={bloco}>
+                            <div className="flex justify-between text-xs font-bold text-gray-600 mb-1">
+                               <span>{bloco}</span>
+                               <span>{count}</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                               <div className="bg-[#2B4C7E] h-2.5 rounded-full" style={{ width: `${(count / stats.total) * 100}%` }}></div>
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+                 <div className="arena-card bg-white p-6">
+                    <h3 className="font-arena text-xl text-[#C63D2F] mb-4 flex items-center gap-2"><TrendingUp size={20}/> Distribuição por Cargo</h3>
+                    <div className="space-y-3">
+                       {stats.byCargo.map(([cargo, count]) => (
+                         <div key={cargo}>
+                            <div className="flex justify-between text-xs font-bold text-gray-600 mb-1">
+                               <span>{cargo}</span>
+                               <span>{count}</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                               <div className="bg-[#C63D2F] h-2.5 rounded-full" style={{ width: `${(count / stats.total) * 100}%` }}></div>
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
               </div>
            </div>
         )}
+
+        {view === ViewMode.LIST && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <h2 className="text-3xl font-arena text-[#2B4C7E] uppercase">Lista de Inscritos</h2>
+              <div className="flex gap-2">
+                 <button onClick={() => { setPasswordPurpose('IMPORT_BACKUP_REQUEST'); setIsPasswordModalOpen(true); }} className="btn-arena px-4 py-2 rounded-xl text-sm flex items-center gap-2 bg-green-600">
+                    <CloudUpload size={16} /> IMPORTAR
+                 </button>
+                 <input type="file" ref={importInputRef} accept=".json" className="hidden" onChange={handleImportFileChange} />
+                 
+                 <button onClick={() => { setPasswordPurpose('EXPORT_BACKUP'); setIsPasswordModalOpen(true); }} className="btn-arena px-4 py-2 rounded-xl text-sm flex items-center gap-2 bg-blue-600">
+                    <CloudDownload size={16} /> EXPORTAR
+                 </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
+               <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar por nome ou bloco..." className="w-full pl-10 pr-4 py-2 bg-gray-50 rounded-xl outline-none focus:ring-2 ring-[#2B4C7E]/20" />
+               </div>
+               <select value={blocoFilter} onChange={e => setBlocoFilter(e.target.value)} className="px-4 py-2 bg-gray-50 rounded-xl outline-none focus:ring-2 ring-[#2B4C7E]/20">
+                  <option value="">Todos os Blocos</option>
+                  {blocosDisponiveis.map(b => <option key={b} value={b}>{b}</option>)}
+               </select>
+               <select value={cargoFilter} onChange={e => setCargoFilter(e.target.value)} className="px-4 py-2 bg-gray-50 rounded-xl outline-none focus:ring-2 ring-[#2B4C7E]/20">
+                  <option value="">Todos os Cargos</option>
+                  {cargosDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+            </div>
+            
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm">
+                   <thead className="bg-gray-50 text-gray-500 font-black uppercase text-[10px] tracking-wider">
+                     <tr>
+                       <th className="p-4">Folião</th>
+                       <th className="p-4">Bloco</th>
+                       <th className="p-4">Contato</th>
+                       <th className="p-4 text-right">Ações</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-100">
+                     {filteredMembers.map(member => (
+                       <tr key={member.id} className="hover:bg-gray-50">
+                         <td className="p-4 flex items-center gap-3">
+                           <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                             {member.photo ? <img src={member.photo} className="w-full h-full object-cover" /> : <User className="w-full h-full p-2 text-gray-400" />}
+                           </div>
+                           <div>
+                             <div className="font-bold text-[#2B4C7E]">{member.nome}</div>
+                             <div className="text-[10px] text-gray-400 uppercase">{member.tipo} {member.apto && `• ${member.apto}`}</div>
+                           </div>
+                         </td>
+                         <td className="p-4 font-medium text-gray-600">{member.bloco}</td>
+                         <td className="p-4 font-mono text-gray-500">{member.celular}</td>
+                         <td className="p-4 text-right">
+                           <button onClick={() => { setMemberIdToDelete(member.id); setPasswordPurpose('DELETE'); setIsPasswordModalOpen(true); }} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={18} /></button>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+               {filteredMembers.length === 0 && <div className="p-10 text-center text-gray-400 font-arena">Nenhum folião encontrado.</div>}
+            </div>
+          </div>
+        )}
+
       </main>
 
-      <footer className="mt-auto py-4 text-center">
-        <p className="text-[9px] font-bold text-[#2B4C7E] uppercase tracking-widest opacity-60">
-          Desenvolvido por <span className="text-[#C63D2F]">Maycon Dias</span> | v2.2
-        </p>
-      </footer>
-
-      {/* MODAL DETALHES DO PARCEIRO */}
-      {viewingSponsor && (
-        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn" onClick={() => setViewingSponsor(null)}>
-           <div className="arena-card w-full max-w-lg bg-white overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
-              <div className="bg-[#2B4C7E] p-6 text-center relative border-b-4 border-[#F9B115]">
-                <button onClick={() => setViewingSponsor(null)} className="absolute top-4 right-4 text-white hover:rotate-90 transition-transform"><X size={28} /></button>
-                <div className="w-32 h-32 mx-auto bg-white rounded-3xl p-4 shadow-xl -mb-16 border-4 border-[#F9B115] flex items-center justify-center">
-                  <img src={viewingSponsor.logo} className="max-w-full max-h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
-                </div>
-              </div>
-              
-              <div className="pt-20 p-8 text-center space-y-4">
-                <div>
-                  <h3 className="font-arena text-3xl text-[#2B4C7E] leading-tight">{viewingSponsor.nome}</h3>
-                  <span className="text-[10px] font-black uppercase text-[#C63D2F] tracking-widest">{viewingSponsor.atuacao}</span>
-                </div>
-                
-                {viewingSponsor.descricao && (
-                  <p className="text-gray-600 font-bold text-sm leading-relaxed px-4 py-4 bg-gray-50 rounded-2xl italic">
-                    "{viewingSponsor.descricao}"
-                  </p>
-                )}
-                
-                <div className="flex flex-col gap-3 pt-4">
-                  {viewingSponsor.telefone && (
-                    <a 
-                      href={`https://wa.me/55${viewingSponsor.telefone.replace(/\D/g,'')}`} 
-                      target="_blank" 
-                      className="btn-arena w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-arena text-xl"
-                    >
-                      <MessageCircle size={24} /> CHAMAR NO WHATSAPP
-                    </a>
-                  )}
-                  <button onClick={() => setViewingSponsor(null)} className="py-3 font-black text-[10px] text-gray-400 uppercase tracking-widest hover:text-[#C63D2F] transition-colors">FECHAR</button>
-                </div>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {viewingPhoto && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn overflow-hidden">
-           <div className="flex justify-between items-center p-4 md:p-6 text-white relative z-50">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Visualizando Foto ({filteredMuralPhotos.findIndex(p => p.id === viewingPhoto.id) + 1} de {filteredMuralPhotos.length})</span>
-                <div className="flex gap-2 mt-2">
-                  <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Download size={14} /> <span className="hidden md:inline">Baixar</span></button>
-                  <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-white/20 transition-all text-xs font-bold"><Share2 size={14} /> <span className="hidden md:inline">Enviar</span></button>
-                  <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="p-2 bg-white/10 rounded-xl flex items-center gap-2 hover:bg-red-500 transition-all text-xs font-bold"><Trash2 size={14} /> <span className="hidden md:inline">Deletar</span></button>
-                </div>
-              </div>
-              <button onClick={() => setViewingPhoto(null)} className="p-3 bg-white/10 rounded-2xl hover:bg-white/20 transition-colors"><X size={32} /></button>
-           </div>
-           
-           <div className="flex-grow flex items-center justify-between p-2 md:p-4 relative">
-              <button onClick={(e) => { e.stopPropagation(); navigatePhoto('prev'); }} className="absolute left-2 md:left-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"><ChevronLeft size={32} /></button>
-              <div className="w-full h-full flex items-center justify-center p-4">
-                <img key={viewingPhoto.id} src={viewingPhoto.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-zoomIn" />
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); navigatePhoto('next'); }} className="absolute right-2 md:right-4 z-50 p-3 md:p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all backdrop-blur-sm"><ChevronRight size={32} /></button>
-           </div>
-        </div>
-      )}
-
-      {infoMessage && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white border-4 border-[#2B4C7E] rounded-[2rem] shadow-[12px_12px_0px_#C63D2F] w-full max-w-sm overflow-hidden flex flex-col items-center text-center p-8 animate-slideUp">
-            <div className="bg-[#F9E7C7] p-4 rounded-full mb-6 border-4 border-[#F9B115]"><AlertCircle size={48} className="text-[#C63D2F]" /></div>
-            <h3 className="font-arena text-2xl text-[#2B4C7E] mb-2 leading-tight uppercase">Atenção!</h3>
-            <p className="font-bold text-gray-600 mb-8">{infoMessage}</p>
-            <button onClick={() => setInfoMessage(null)} className="btn-arena w-full py-4 rounded-2xl font-arena text-xl uppercase">ENTENDI!</button>
-          </div>
-        </div>
-      )}
-
+      {/* Password Modal */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-          <div className="arena-card w-full max-sm bg-white p-8 animate-slideUp">
-            <h3 className="font-arena text-2xl mb-4 text-center text-[#2B4C7E]">ACESSO RESTRITO</h3>
-            <p className="text-[10px] font-bold text-gray-400 text-center mb-6 uppercase tracking-widest">Digite a senha de administrador</p>
-            <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className={inputStyles} placeholder="SENHA" autoFocus onKeyDown={e => e.key === 'Enter' && handleConfirmPassword()} />
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => { setIsPasswordModalOpen(false); setMemberIdToDelete(null); setPhotoIdToDelete(null); setSponsorIdToDelete(null); setSponsorIdToEdit(null); setPendingBackupData(null); }} className="flex-grow py-3 border-2 border-gray-200 rounded-xl font-bold uppercase text-[10px] tracking-widest text-[#000] bg-gray-50 hover:bg-gray-100 transition-colors">Sair</button>
-              <button onClick={handleConfirmPassword} className="btn-arena flex-grow py-3 rounded-xl font-arena text-lg uppercase">Confirmar</button>
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full animate-scaleIn">
+            <div className="text-center mb-6">
+               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-red-500">
+                 <ShieldCheck size={32} className="text-red-600" />
+               </div>
+               <h3 className="text-2xl font-arena text-[#2B4C7E]">ACESSO RESTRITO</h3>
+               <p className="text-gray-500 text-xs uppercase font-bold tracking-widest mt-1">Digite a senha da administração</p>
+            </div>
+            <input 
+              type="password" 
+              value={passwordInput} 
+              onChange={e => setPasswordInput(e.target.value)} 
+              className="w-full px-5 py-3 rounded-xl border-2 border-[#2B4C7E]/20 text-center font-black text-2xl tracking-widest text-[#2B4C7E] mb-6 focus:border-[#2B4C7E] outline-none"
+              placeholder="••••••••"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setIsPasswordModalOpen(false)} className="flex-1 py-3 bg-gray-200 text-gray-600 rounded-xl font-bold uppercase hover:bg-gray-300">Cancelar</button>
+              <button onClick={handleConfirmPassword} className="flex-1 py-3 bg-[#2B4C7E] text-white rounded-xl font-bold uppercase hover:bg-[#1a365d]">Acessar</button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="bg-[#2B4C7E] border-t-4 border-[#F9B115] p-4 sticky bottom-0 z-50 shadow-2xl">
-        <div className="max-w-md mx-auto flex justify-around text-white">
-          <button onClick={() => setView(ViewMode.HOME)} className={`flex flex-col items-center transition-all ${view === ViewMode.HOME ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Home size={24} /><span className="text-[7px] font-black mt-1 uppercase">Início</span></button>
-          <button onClick={() => { setView(ViewMode.REGISTER); setIsRegistered(false); }} className={`flex flex-col items-center transition-all ${view === ViewMode.REGISTER ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><UserPlus size={24} /><span className="text-[7px] font-black mt-1 uppercase">Inscrição</span></button>
-          <button onClick={() => setView(ViewMode.PHOTOS)} className={`flex flex-col items-center transition-all ${view === ViewMode.PHOTOS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><ImageIcon size={24} /><span className="text-[7px] font-black mt-1 uppercase">Mural</span></button>
-          <button onClick={() => setView(ViewMode.SPONSORS)} className={`flex flex-col items-center transition-all ${view === ViewMode.SPONSORS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Handshake size={24} /><span className="text-[7px] font-black mt-1 uppercase">Parceiros</span></button>
-          <button onClick={() => setView(ViewMode.STATISTICS)} className={`flex flex-col items-center transition-all ${view === ViewMode.STATISTICS ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><BarChart3 size={24} /><span className="text-[7px] font-black mt-1 uppercase">Dados</span></button>
-          <button onClick={() => { setPasswordPurpose('VIEW_LIST'); setIsPasswordModalOpen(true); }} className={`flex flex-col items-center transition-all ${view === ViewMode.LIST ? 'text-[#F9B115] scale-110' : 'opacity-50 hover:opacity-100'}`}><Users size={24} /><span className="text-[7px] font-black mt-1 uppercase">Lista</span></button>
+      {/* Photo Viewer */}
+      {viewingPhoto && (
+        <div className="fixed inset-0 z-[70] bg-black/95 flex flex-col justify-center items-center animate-fadeIn">
+           <button onClick={() => setViewingPhoto(null)} className="absolute top-4 right-4 text-white/50 hover:text-white p-2"><X size={32} /></button>
+           <button onClick={() => navigatePhoto('prev')} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-4 hidden md:block"><ChevronLeft size={48} /></button>
+           <button onClick={() => navigatePhoto('next')} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-4 hidden md:block"><ChevronRight size={48} /></button>
+           
+           <img src={viewingPhoto.url} className="max-w-full max-h-[80vh] object-contain shadow-2xl" />
+           
+           <div className="absolute bottom-8 flex gap-6">
+              <button onClick={() => handleDownloadPhoto(viewingPhoto.url, viewingPhoto.id)} className="flex flex-col items-center gap-1 text-white/70 hover:text-white"><Download size={24} /><span className="text-[10px] uppercase font-bold">Baixar</span></button>
+              <button onClick={() => handleSharePhoto(viewingPhoto.url)} className="flex flex-col items-center gap-1 text-white/70 hover:text-white"><Share2 size={24} /><span className="text-[10px] uppercase font-bold">Compartilhar</span></button>
+              <button onClick={() => { setPhotoIdToDelete(viewingPhoto.id); setPasswordPurpose('DELETE_PHOTO'); setIsPasswordModalOpen(true); }} className="flex flex-col items-center gap-1 text-red-400 hover:text-red-500"><Trash2 size={24} /><span className="text-[10px] uppercase font-bold">Excluir</span></button>
+           </div>
         </div>
-      </nav>
+      )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
-        .animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .animate-zoomIn { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        .btn-arena:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-        input[type=range].accent-[#C63D2F]::-webkit-slider-thumb {
-          background: #C63D2F;
-          border: 2px solid white;
-          box-shadow: 2px 2px 0px #2B4C7E;
-        }
-      `}} />
+      {/* Sponsor Viewer */}
+      {viewingSponsor && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setViewingSponsor(null)}>
+           <div className="bg-white rounded-3xl p-8 max-w-md w-full relative animate-scaleIn text-center" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setViewingSponsor(null)} className="absolute top-4 right-4 text-gray-300 hover:text-gray-500"><X size={24} /></button>
+              <div className="w-40 h-40 mx-auto mb-6 flex items-center justify-center">
+                 <img src={viewingSponsor.logo} className="max-w-full max-h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
+              </div>
+              <h2 className="font-arena text-3xl text-[#2B4C7E] mb-2">{viewingSponsor.nome}</h2>
+              <p className="text-[#C63D2F] font-black uppercase tracking-widest text-xs mb-6">{viewingSponsor.atuacao}</p>
+              
+              {viewingSponsor.descricao && (
+                <div className="bg-gray-50 p-4 rounded-xl text-gray-600 text-sm mb-6 leading-relaxed">
+                   {viewingSponsor.descricao}
+                </div>
+              )}
+              
+              <div className="flex gap-3 justify-center">
+                 <a href={`https://wa.me/55${viewingSponsor.telefone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="btn-arena px-6 py-3 rounded-xl flex items-center gap-2 bg-[#25D366] text-white">
+                    <MessageCircle size={20} /> WHATSAPP
+                 </a>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Notifications */}
+      {infoMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#2B4C7E] text-white px-6 py-3 rounded-full shadow-2xl z-[80] flex items-center gap-3 animate-slideUp" onAnimationEnd={() => setTimeout(() => setInfoMessage(null), 3000)}>
+           <Info size={20} className="text-[#F9B115]" />
+           <span className="font-bold text-sm">{infoMessage}</span>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -23,6 +23,7 @@ export interface Sponsor {
   atuacao: string;
   telefone: string;
   descricao?: string;
+  clicks?: number; // Contador de cliques
   createdAt: number;
 }
 
